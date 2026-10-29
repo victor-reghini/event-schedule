@@ -1,0 +1,16 @@
+# Antigravity
+.agents/
+.cursor/
+.github/copilot-instructions.md
+runs/
+.clinerules
+.cursorrules
+.windsurfrules
+AGENTS.md
+CLAUDE.md
+
+# Dependencies & Build
+node_modules/
+dist/
+dist-ssr/
+*.local
