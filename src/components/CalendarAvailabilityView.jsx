@@ -891,7 +891,9 @@ export default function CalendarAvailabilityView({
                 gap: 4
               }}>
                 {(item.isRecurring || item.recurrenceRuleId) && (
-                  <span title="Horário recorrente semanal">🔁</span>
+                  <span title="Horário recorrente semanal" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    <RotateCcw size={12} />
+                  </span>
                 )}
                 {isAvail ? t('freeBadge') : t('busyBadge')}
               </div>
@@ -1037,7 +1039,7 @@ export default function CalendarAvailabilityView({
               { id: 'month', label: t('viewMonth') },
               { id: 'week', label: t('viewWeek') },
               { id: 'day', label: t('viewDay') },
-              { id: 'suggestions', label: `💡 ${t('viewSuggestions')} (${suggestionsList.length})` }
+              { id: 'suggestions', label: `${t('viewSuggestions')} (${suggestionsList.length})` }
             ].map(({ id, label }) => {
               const isActive = viewMode === id;
               return (
@@ -1266,9 +1268,11 @@ export default function CalendarAvailabilityView({
                         onMouseEnter={(e) => { e.currentTarget.style.filter = 'brightness(0.92)'; }}
                         onMouseLeave={(e) => { e.currentTarget.style.filter = 'none'; }}
                       >
-                        {(item.isRecurring || item.recurrenceRuleId) && '🔁 '}
+                        {(item.isRecurring || item.recurrenceRuleId) && (
+                          <RotateCcw size={10} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 3 }} />
+                        )}
                         {item.title ? `${item.title}: ` : ''}
-                        {item.status === 'available' ? '✓ Livre' : '✗ Ocup.'} {item.startTime}–{item.endTime}
+                        {item.status === 'available' ? 'Livre' : 'Ocup.'} {item.startTime}–{item.endTime}
                       </div>
                     ))}
                   </div>
@@ -1769,8 +1773,18 @@ export default function CalendarAvailabilityView({
                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase' }}>
                   {timeDialog.isEditing ? 'Editar Bloco de Horário' : 'Cadastrar Período'}
                 </div>
-                <h3 className="modal-title">
-                  {timeDialog.status === 'available' ? '🟢 Disponibilidade' : '🔴 Indisponibilidade'}
+                <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {timeDialog.status === 'available' ? (
+                    <>
+                      <CheckCircle2 size={18} color="#166534" />
+                      <span>Disponibilidade</span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle size={18} color="#991b1b" />
+                      <span>Indisponibilidade</span>
+                    </>
+                  )}
                 </h3>
               </div>
               <button className="modal-close-btn" onClick={() => setTimeDialog(null)}>
@@ -1793,10 +1807,15 @@ export default function CalendarAvailabilityView({
                     border: `1.5px solid ${timeDialog.status === 'available' ? 'var(--color-available)' : 'var(--border-color)'}`,
                     background: timeDialog.status === 'available' ? 'var(--color-available-bg)' : 'white',
                     color: timeDialog.status === 'available' ? '#065f46' : 'var(--text-muted)',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6
                   }}
                 >
-                  🟢 Livre / Disponível
+                  <CheckCircle2 size={16} />
+                  <span>Livre / Disponível</span>
                 </button>
                 <button
                   type="button"
@@ -1809,10 +1828,15 @@ export default function CalendarAvailabilityView({
                     border: `1.5px solid ${timeDialog.status === 'unavailable' ? 'var(--color-unavailable)' : 'var(--border-color)'}`,
                     background: timeDialog.status === 'unavailable' ? 'var(--color-unavailable-bg)' : 'white',
                     color: timeDialog.status === 'unavailable' ? '#991b1b' : 'var(--text-muted)',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6
                   }}
                 >
-                  🔴 Ocupado
+                  <XCircle size={16} />
+                  <span>Ocupado</span>
                 </button>
               </div>
             </div>
@@ -2155,7 +2179,10 @@ export default function CalendarAvailabilityView({
                       >
                         <div>
                           <div style={{ fontWeight: 800, fontSize: '0.88rem', color: isAvail ? '#166534' : '#991b1b', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span>{isAvail ? '🟢 Livre' : '🔴 Ocupado'}</span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              {isAvail ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
+                              {isAvail ? 'Livre' : 'Ocupado'}
+                            </span>
                             <span>•</span>
                             <span>{r.title}</span>
                           </div>
@@ -2224,10 +2251,15 @@ export default function CalendarAvailabilityView({
                       border: `1.5px solid ${newRoutineForm.status === 'available' ? 'var(--color-available)' : 'var(--border-color)'}`,
                       background: newRoutineForm.status === 'available' ? 'var(--color-available-bg)' : 'white',
                       color: newRoutineForm.status === 'available' ? '#065f46' : 'var(--text-muted)',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6
                     }}
                   >
-                    🟢 Livre
+                    <CheckCircle2 size={14} />
+                    <span>Livre</span>
                   </button>
                   <button
                     type="button"
@@ -2240,10 +2272,15 @@ export default function CalendarAvailabilityView({
                       border: `1.5px solid ${newRoutineForm.status === 'unavailable' ? 'var(--color-unavailable)' : 'var(--border-color)'}`,
                       background: newRoutineForm.status === 'unavailable' ? 'var(--color-unavailable-bg)' : 'white',
                       color: newRoutineForm.status === 'unavailable' ? '#991b1b' : 'var(--text-muted)',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6
                     }}
                   >
-                    🔴 Ocupado
+                    <XCircle size={14} />
+                    <span>Ocupado</span>
                   </button>
                 </div>
               </div>
