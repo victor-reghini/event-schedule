@@ -255,62 +255,34 @@ export default function EditEventModal({
           </div>
 
           {/* DEFINIÇÃO DO PERÍODO DO EVENTO (INTERVALO OU DIAS ESPECÍFICOS) */}
-          <div className="form-group" style={{ margin: 0, background: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.85rem' }}>
+          <div className="form-group event-period-box" style={{ margin: 0 }}>
             <label className="form-label" style={{ fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: 5, marginBottom: '0.5rem' }}>
               <CalendarRange size={15} color="var(--primary)" />
               {t('datesWindow')}
             </label>
 
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <div className="date-mode-toggle">
               <button
                 type="button"
+                className={`date-mode-btn ${dateMode === 'range' ? 'active' : ''}`}
                 onClick={() => setDateMode('range')}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  padding: '0.5rem',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.825rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  border: `1.5px solid ${dateMode === 'range' ? 'var(--primary)' : 'var(--border-color)'}`,
-                  background: dateMode === 'range' ? 'var(--primary-light)' : 'white',
-                  color: dateMode === 'range' ? 'var(--primary)' : 'var(--text-muted)'
-                }}
               >
                 <CalendarRange size={15} />
-                Período Contínuo
+                <span>Período Contínuo</span>
               </button>
 
               <button
                 type="button"
+                className={`date-mode-btn ${dateMode === 'specific' ? 'active' : ''}`}
                 onClick={() => setDateMode('specific')}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  padding: '0.5rem',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.825rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  border: `1.5px solid ${dateMode === 'specific' ? 'var(--primary)' : 'var(--border-color)'}`,
-                  background: dateMode === 'specific' ? 'var(--primary-light)' : 'white',
-                  color: dateMode === 'specific' ? 'var(--primary)' : 'var(--text-muted)'
-                }}
               >
                 <CheckSquare size={15} />
-                Dias Específicos
+                <span>Dias Específicos</span>
               </button>
             </div>
 
             {dateMode === 'range' ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+              <div className="date-range-grid">
                 <div>
                   <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
                     Início
@@ -370,11 +342,11 @@ export default function EditEventModal({
                   ))}
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div className="add-date-row">
                   <input
                     type="date"
                     className="form-input"
-                    style={{ maxWidth: 180, fontSize: '0.85rem' }}
+                    style={{ fontSize: '0.85rem' }}
                     value={newDateInput}
                     onChange={(e) => setNewDateInput(e.target.value)}
                   />
@@ -396,7 +368,7 @@ export default function EditEventModal({
               <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)', display: 'block', marginBottom: 4 }}>
                 Sugestão de Horário Preferencial (Opcional)
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+              <div className="time-range-grid">
                 <div>
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>Das:</span>
                   <input
@@ -438,7 +410,7 @@ export default function EditEventModal({
           </div>
 
           {/* Ações: Excluir Evento à esquerda, Cancelar e Salvar à direita */}
-          <div style={{
+          <div className="edit-modal-footer" style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',

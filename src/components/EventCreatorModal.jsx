@@ -188,7 +188,7 @@ export default function EventCreatorModal({
           </div>
 
           {/* Duração & Localização */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+          <div className="modal-grid-2col">
             <div>
               <label className="form-label">
                 <Clock size={15} style={{ display: 'inline', verticalAlign: '-2px', marginRight: 4 }} />
@@ -250,68 +250,42 @@ export default function EventCreatorModal({
               id="allowLocationSuggestions"
               checked={allowLocationSuggestions}
               onChange={(e) => setAllowLocationSuggestions(e.target.checked)}
-              style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--primary)' }}
+              style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--primary)', flexShrink: 0 }}
             />
-            <label htmlFor="allowLocationSuggestions" style={{ fontSize: '0.825rem', fontWeight: 600, color: '#166534', cursor: 'pointer' }}>
+            <label htmlFor="allowLocationSuggestions" style={{ fontSize: '0.825rem', fontWeight: 600, color: '#166534', cursor: 'pointer', wordBreak: 'break-word' }}>
               Abrir campo de local para sugestões dos convidados (com votação para aprovar ou reprovar)
             </label>
           </div>
 
           {/* DEFINIÇÃO DO PERÍODO DO EVENTO (INTERVALO OU DIAS ESPECÍFICOS) */}
-          <div className="form-group" style={{ background: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '1rem' }}>
+          <div className="form-group event-period-box">
             <label className="form-label" style={{ marginBottom: '0.65rem' }}>
               Como você deseja definir as datas sugeridas?
             </label>
 
-            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
+            <div className="date-mode-toggle">
               <button
                 type="button"
+                className={`date-mode-btn ${dateMode === 'range' ? 'active' : ''}`}
                 onClick={() => setDateMode('range')}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  padding: '0.6rem',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.85rem',
-                  fontWeight: 700,
-                  border: `1px solid ${dateMode === 'range' ? 'var(--primary)' : 'var(--border-color)'}`,
-                  background: dateMode === 'range' ? 'var(--primary-light)' : 'white',
-                  color: dateMode === 'range' ? 'var(--primary)' : 'var(--text-muted)'
-                }}
               >
                 <CalendarRange size={16} />
-                Período Contínuo (Dia X ao Dia Y)
+                <span>Período Contínuo</span>
               </button>
 
               <button
                 type="button"
+                className={`date-mode-btn ${dateMode === 'specific' ? 'active' : ''}`}
                 onClick={() => setDateMode('specific')}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  padding: '0.6rem',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.85rem',
-                  fontWeight: 700,
-                  border: `1px solid ${dateMode === 'specific' ? 'var(--primary)' : 'var(--border-color)'}`,
-                  background: dateMode === 'specific' ? 'var(--primary-light)' : 'white',
-                  color: dateMode === 'specific' ? 'var(--primary)' : 'var(--text-muted)'
-                }}
               >
                 <CheckSquare size={16} />
-                Dias Específicos
+                <span>Dias Específicos</span>
               </button>
             </div>
 
             {dateMode === 'range' ? (
               <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div className="date-range-grid">
                   <div>
                     <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
                       Data de Início do Período
@@ -361,7 +335,7 @@ export default function EventCreatorModal({
                         <button 
                           type="button" 
                           onClick={() => handleRemoveSpecificDate(dStr)}
-                          style={{ color: '#94a3b8', display: 'flex' }}
+                          style={{ color: '#94a3b8', display: 'flex', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
                         >
                           <Trash2 size={13} />
                         </button>
@@ -370,11 +344,10 @@ export default function EventCreatorModal({
                   ))}
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div className="add-date-row">
                   <input
                     type="date"
                     className="form-input"
-                    style={{ maxWidth: 200 }}
                     value={newDateInput}
                     onChange={(e) => setNewDateInput(e.target.value)}
                   />
@@ -395,7 +368,7 @@ export default function EventCreatorModal({
               <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)', display: 'block', marginBottom: 4 }}>
                 Sugestão de Horário Preferencial pelo Organizador
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="time-range-grid">
                 <div>
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>Das:</span>
                   <input
@@ -466,7 +439,7 @@ export default function EventCreatorModal({
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+          <div className="modal-actions">
             <button type="button" className="btn-secondary" onClick={onClose}>
               Cancelar
             </button>
