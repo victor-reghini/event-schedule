@@ -13,24 +13,30 @@ import {
   Sparkles,
   Save,
   MessageSquare,
-  MousePointer,
   ThumbsUp,
   ThumbsDown,
   CheckCircle2,
-  XCircle
+  XCircle,
+  RotateCcw,
+  Bookmark
 } from 'lucide-react';
 import { timeToMinutes, minutesToTime } from '../services/schedulerAlgorithm';
 import { useI18n } from '../services/i18n';
 import Avatar from './Avatar';
+import {
+  DAY_NAMES,
+  roundTo15,
+  getDayOfWeekFromDateStr,
+  getUserSavedRoutines,
+  upsertUserSavedRoutine,
+  removeUserSavedRoutine,
+  applyRoutinesToDates,
+  buildAvailabilitiesMap
+} from '../services/userAvailability';
 
 const START_HOUR = 8;
 const END_HOUR = 22;
 const HOUR_HEIGHT = 60; // 60px por hora = 1px por minuto (15m = 15px)
-
-// Arredonda minutos para o múltiplo de 15 mais próximo
-function roundTo15(mins) {
-  return Math.round(mins / 15) * 15;
-}
 
 // Reconstrói intervalos mesclados a partir de um mapa de disponibilidades avulsas
 export function deriveIntervalsFromAvailabilities(availMap) {
@@ -172,8 +178,33 @@ export default function CalendarAvailabilityView({
   const [dragStart, setDragStart] = useState(null); // { dateStr, minutes }
   const [dragCurrent, setDragCurrent] = useState(null); // { dateStr, minutes }
 
-  // Diálogo para cadastro ao clicar no dia ou ao soltar o arraste
-  const [timeDialog, setTimeDialog] = useState(null); // { dateStr, startTime: '14:15', endTime: '18:45', status: 'available' }
+  // Diálogo para cadastro ou edição de horário
+  const [timeDialog, setTimeDialog] = useState(null);
+
+  // Rotinas salvas no perfil do usuário
+  const [userRoutines, setUserRoutines] = useState(() => {
+    return currentUser?.id ? getUserSavedRoutines(currentUser.id) : [];
+  });
+  const [isRoutineModalOpen, setIsRoutineModalOpen] = useState(false);
+  const [showRoutinePrompt, setShowRoutinePrompt] = useState(true);
+
+  // Formulário para cadastrar rotina no perfil dentro do modal de rotinas
+  const [newRoutineForm, setNewRoutineForm] = useState({
+    title: '',
+    status: 'unavailable',
+    daysOfWeek: [2], // terça por padrão (ex: aulas nas terças à noite)
+    startTime: '19:00',
+    endTime: '22:00'
+  });
+
+  // Recarrega rotinas salvas quando currentUser mudar
+  useEffect(() => {
+    if (currentUser?.id) {
+      setUserRoutines(getUserSavedRoutines(currentUser.id));
+    } else {
+      setUserRoutines([]);
+    }
+  }, [currentUser?.id]);
 
   // Formulário para criar nova sugestão coletiva
   const [isCreatingSuggestion, setIsCreatingSuggestion] = useState(false);
@@ -223,8 +254,45 @@ export default function CalendarAvailabilityView({
     setNavDate(new Date());
   };
 
-  // Salva intervalo
-  const handleSaveInterval = (dateStr, startTime, endTime, status) => {
+  // Abrir modal para editar bloco existente (Requirement 1)
+  const handleEditInterval = (item) => {
+    const dayOfWeek = getDayOfWeekFromDateStr(item.dateStr);
+    const recDays = item.recurrenceDays && item.recurrenceDays.length ? item.recurrenceDays : [dayOfWeek];
+
+    setTimeDialog({
+      id: item.id,
+      dateStr: item.dateStr,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      status: item.status || 'available',
+      title: item.title || '',
+      isRecurring: Boolean(item.isRecurring || item.recurrenceRuleId),
+      recurrenceRuleId: item.recurrenceRuleId || null,
+      recurrenceDays: recDays,
+      saveToProfile: item.saveToProfile !== false,
+      editScope: 'all', // 'all' (todas as ocorrências) | 'single' (apenas esta data)
+      isEditing: true
+    });
+  };
+
+  // Salva no modal (edição ou novo bloco) com suporte a recorrência e perfil (Requirements 1, 2, 3)
+  const handleSaveIntervalModal = async () => {
+    if (!timeDialog) return;
+    const {
+      id,
+      dateStr,
+      startTime,
+      endTime,
+      status,
+      title = '',
+      isRecurring = false,
+      recurrenceRuleId = null,
+      recurrenceDays = [],
+      saveToProfile = false,
+      editScope = 'all',
+      isEditing = false
+    } = timeDialog;
+
     const startM = timeToMinutes(startTime);
     const endM = timeToMinutes(endTime);
 
@@ -233,68 +301,258 @@ export default function CalendarAvailabilityView({
       return;
     }
 
-    const newInterval = {
-      id: `int-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      dateStr,
-      startTime,
-      endTime,
-      status
-    };
+    const currentDow = getDayOfWeekFromDateStr(dateStr);
+    const activeRecDays = isRecurring && recurrenceDays.length ? recurrenceDays : [currentDow];
+    const ruleId = recurrenceRuleId || (isRecurring ? `rule-${Date.now()}-${Math.random().toString(36).substr(2, 4)}` : null);
 
-    const updatedIntervals = [...customIntervals, newInterval];
-    setCustomIntervals(updatedIntervals);
+    // Se marcado para salvar no perfil do usuário (Requirement 3)
+    if (saveToProfile && currentUser?.id) {
+      const routineObj = {
+        id: ruleId || `routine-${Date.now()}`,
+        title: title.trim() || (status === 'available' ? 'Livre' : 'Ocupado'),
+        status,
+        startTime,
+        endTime,
+        daysOfWeek: activeRecDays
+      };
+      const updatedRoutines = await upsertUserSavedRoutine(currentUser.id, routineObj);
+      setUserRoutines(updatedRoutines);
+    }
 
-    // Mapeia para steps de 15 minutos e horas completas para compatibilidade total
-    const updatedAvail = { ...availabilities };
-    const roundedStart = roundTo15(startM);
-    let roundedEnd = roundTo15(endM);
-    if (roundedEnd <= roundedStart) {
-      roundedEnd = roundedStart + 15;
-    }
-    for (let m = roundedStart; m < roundedEnd; m += 15) {
-      const timeStr = minutesToTime(m);
-      updatedAvail[`${dateStr}_${timeStr}`] = status;
-    }
-    for (let h = Math.floor(startM / 60); h <= Math.ceil(endM / 60); h++) {
-      const hM = h * 60;
-      if (hM >= startM && hM < endM) {
-        updatedAvail[`${dateStr}_${minutesToTime(hM)}`] = status;
+    let updatedList = [...customIntervals];
+
+    if (isEditing) {
+      // Edição de bloco existente
+      if (isRecurring && ruleId && editScope === 'all') {
+        const filtered = updatedList.filter(i => i.recurrenceRuleId !== ruleId && i.id !== id);
+        const eventDatesPool = Array.from(new Set([
+          ...(event.dates || []),
+          ...(event.extraDates || []),
+          dateStr
+        ]));
+
+        const newOccurrences = [];
+        eventDatesPool.forEach(d => {
+          const dow = getDayOfWeekFromDateStr(d);
+          if (activeRecDays.includes(dow)) {
+            newOccurrences.push({
+              id: `int-${ruleId}-${d}`,
+              recurrenceRuleId: ruleId,
+              dateStr: d,
+              startTime,
+              endTime,
+              status,
+              title: title.trim(),
+              isRecurring: true,
+              recurrenceDays: activeRecDays,
+              saveToProfile: Boolean(saveToProfile)
+            });
+          }
+        });
+
+        updatedList = [...filtered, ...newOccurrences];
+      } else {
+        // Altera apenas esta ocorrência
+        updatedList = updatedList.map(item => {
+          if (item.id === id) {
+            return {
+              ...item,
+              dateStr,
+              startTime,
+              endTime,
+              status,
+              title: title.trim(),
+              isRecurring: editScope === 'single' ? false : Boolean(isRecurring),
+              recurrenceRuleId: editScope === 'single' ? null : ruleId,
+              recurrenceDays: activeRecDays,
+              saveToProfile: Boolean(saveToProfile)
+            };
+          }
+          return item;
+        });
+      }
+    } else {
+      // Novo bloco
+      if (isRecurring) {
+        const eventDatesPool = Array.from(new Set([
+          ...(event.dates || []),
+          ...(event.extraDates || []),
+          dateStr
+        ]));
+
+        const newOccurrences = [];
+        eventDatesPool.forEach(d => {
+          const dow = getDayOfWeekFromDateStr(d);
+          if (activeRecDays.includes(dow)) {
+            newOccurrences.push({
+              id: `int-${ruleId}-${d}-${Math.random().toString(36).substr(2, 4)}`,
+              recurrenceRuleId: ruleId,
+              dateStr: d,
+              startTime,
+              endTime,
+              status,
+              title: title.trim(),
+              isRecurring: true,
+              recurrenceDays: activeRecDays,
+              saveToProfile: Boolean(saveToProfile)
+            });
+          }
+        });
+
+        if (!newOccurrences.some(i => i.dateStr === dateStr)) {
+          newOccurrences.push({
+            id: `int-${ruleId}-${dateStr}`,
+            recurrenceRuleId: ruleId,
+            dateStr,
+            startTime,
+            endTime,
+            status,
+            title: title.trim(),
+            isRecurring: true,
+            recurrenceDays: activeRecDays,
+            saveToProfile: Boolean(saveToProfile)
+          });
+        }
+
+        updatedList = [...updatedList, ...newOccurrences];
+      } else {
+        updatedList.push({
+          id: `int-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          dateStr,
+          startTime,
+          endTime,
+          status,
+          title: title.trim(),
+          isRecurring: false,
+          saveToProfile: Boolean(saveToProfile)
+        });
       }
     }
 
+    const updatedAvail = buildAvailabilitiesMap(updatedList);
+    setCustomIntervals(updatedList);
     setAvailabilities(updatedAvail);
     setHasSaved(false);
     setTimeDialog(null);
   };
 
-  // Remove intervalo cadastrado
+  // Exclui bloco pelo modal
+  const handleDeleteFromModal = () => {
+    if (!timeDialog || !timeDialog.id) return;
+    const { id, recurrenceRuleId, isRecurring, editScope } = timeDialog;
+
+    let updatedList;
+    if (isRecurring && recurrenceRuleId && editScope === 'all') {
+      updatedList = customIntervals.filter(i => i.recurrenceRuleId !== recurrenceRuleId && i.id !== id);
+    } else {
+      updatedList = customIntervals.filter(i => i.id !== id);
+    }
+
+    const updatedAvail = buildAvailabilitiesMap(updatedList);
+    setCustomIntervals(updatedList);
+    setAvailabilities(updatedAvail);
+    setHasSaved(false);
+    setTimeDialog(null);
+  };
+
+  // Remove intervalo cadastrado pelo botão 'x' rápido
   const handleRemoveInterval = (idToRemove) => {
     const item = customIntervals.find(i => i.id === idToRemove);
-    const updated = customIntervals.filter(i => i.id !== idToRemove);
-    setCustomIntervals(updated);
+    if (!item) return;
 
-    if (item) {
-      const startM = timeToMinutes(item.startTime);
-      const endM = timeToMinutes(item.endTime);
-      const updatedAvail = { ...availabilities };
-      const roundedStart = roundTo15(startM);
-      let roundedEnd = roundTo15(endM);
-      if (roundedEnd <= roundedStart) {
-        roundedEnd = roundedStart + 15;
+    let updated;
+    if (item.isRecurring && item.recurrenceRuleId) {
+      const confirmAll = window.confirm(
+        'Este bloco é recorrente. Deseja remover TODAS as ocorrências deste horário?\n\nOK: Remover todas as ocorrências\nCancelar: Remover apenas este dia'
+      );
+      if (confirmAll) {
+        updated = customIntervals.filter(i => i.recurrenceRuleId !== item.recurrenceRuleId && i.id !== idToRemove);
+      } else {
+        updated = customIntervals.filter(i => i.id !== idToRemove);
       }
-      for (let m = roundedStart; m < roundedEnd; m += 15) {
-        const timeStr = minutesToTime(m);
-        delete updatedAvail[`${item.dateStr}_${timeStr}`];
-      }
-      for (let h = Math.floor(startM / 60); h <= Math.ceil(endM / 60); h++) {
-        const hM = h * 60;
-        if (hM >= startM && hM < endM) {
-          delete updatedAvail[`${item.dateStr}_${minutesToTime(hM)}`];
-        }
-      }
-      setAvailabilities(updatedAvail);
+    } else {
+      updated = customIntervals.filter(i => i.id !== idToRemove);
     }
+
+    const updatedAvail = buildAvailabilitiesMap(updated);
+    setCustomIntervals(updated);
+    setAvailabilities(updatedAvail);
     setHasSaved(false);
+  };
+
+  // Aplica todas as rotinas salvas do perfil às datas deste evento (Requirement 3)
+  const handleApplySavedRoutinesToEvent = () => {
+    if (!userRoutines.length) {
+      alert('Você ainda não possui rotinas salvas no seu perfil.');
+      return;
+    }
+
+    const eventDatesPool = Array.from(new Set([
+      ...(event.dates || []),
+      ...(event.extraDates || [])
+    ]));
+
+    if (!eventDatesPool.length) {
+      eventDatesPool.push(toDateStr(navDate));
+    }
+
+    const { newIntervals, addedCount } = applyRoutinesToDates(
+      userRoutines,
+      eventDatesPool,
+      customIntervals
+    );
+
+    if (addedCount === 0) {
+      alert('Todas as suas rotinas salvas já estão aplicadas às datas deste evento.');
+      return;
+    }
+
+    const updatedAvail = buildAvailabilitiesMap(newIntervals);
+    setCustomIntervals(newIntervals);
+    setAvailabilities(updatedAvail);
+    setHasSaved(false);
+    setShowRoutinePrompt(false);
+    setIsRoutineModalOpen(false);
+  };
+
+  // Criação de nova rotina pelo modal de gerenciamento de rotinas
+  const handleCreateRoutineSubmit = async (e) => {
+    e.preventDefault();
+    if (!currentUser?.id) return;
+    if (!newRoutineForm.daysOfWeek.length) {
+      alert('Selecione pelo menos um dia da semana para a rotina.');
+      return;
+    }
+    if (timeToMinutes(newRoutineForm.startTime) >= timeToMinutes(newRoutineForm.endTime)) {
+      alert('O horário de início deve ser anterior ao de término.');
+      return;
+    }
+
+    const routineObj = {
+      id: `routine-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      title: newRoutineForm.title.trim() || (newRoutineForm.status === 'available' ? 'Livre' : 'Ocupado'),
+      status: newRoutineForm.status,
+      daysOfWeek: newRoutineForm.daysOfWeek,
+      startTime: newRoutineForm.startTime,
+      endTime: newRoutineForm.endTime
+    };
+
+    const updated = await upsertUserSavedRoutine(currentUser.id, routineObj);
+    setUserRoutines(updated);
+    setNewRoutineForm({
+      title: '',
+      status: 'unavailable',
+      daysOfWeek: [2],
+      startTime: '19:00',
+      endTime: '22:00'
+    });
+  };
+
+  // Remoção de uma rotina do perfil
+  const handleRemoveRoutine = async (routineId) => {
+    if (!currentUser?.id) return;
+    const updated = await removeUserSavedRoutine(currentUser.id, routineId);
+    setUserRoutines(updated);
   };
 
   // Eventos de arrastar com precisão de 15 minutos
@@ -327,13 +585,19 @@ export default function CalendarAvailabilityView({
       const maxM = Math.max(dragStart.minutes, dragCurrent.minutes) + 15;
       const sTime = minutesToTime(minM);
       const eTime = minutesToTime(maxM);
+      const dow = getDayOfWeekFromDateStr(dragStart.dateStr);
 
       // Abre diálogo para escolher Livre ou Ocupado e ajustar minutos
       setTimeDialog({
         dateStr: dragStart.dateStr,
         startTime: sTime,
         endTime: eTime,
-        status: 'available'
+        status: 'available',
+        title: '',
+        isRecurring: false,
+        recurrenceDays: [dow],
+        saveToProfile: false,
+        isEditing: false
       });
     }
     setIsDragging(false);
@@ -569,6 +833,8 @@ export default function CalendarAvailabilityView({
           return (
             <div
               key={item.id}
+              onClick={() => handleEditInterval(item)}
+              title="Clique para editar este bloco de horário"
               style={{
                 position: 'absolute',
                 top: `${startOffset}px`,
@@ -585,29 +851,61 @@ export default function CalendarAvailabilityView({
                 justifyContent: 'center',
                 padding: '4px 8px',
                 boxShadow: 'var(--shadow-sm)',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.filter = 'brightness(0.96)';
+                e.currentTarget.style.zIndex = '15';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.filter = 'none';
+                e.currentTarget.style.zIndex = '10';
               }}
             >
+              {/* Se tiver título */}
+              {item.title && (
+                <div style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  color: isAvail ? '#065f46' : '#991b1b',
+                  textAlign: 'center',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: '85%'
+                }}>
+                  {item.title}
+                </div>
+              )}
+
               <div style={{
                 fontWeight: 800,
-                fontSize: blockHeight < 40 ? '0.75rem' : '0.85rem',
+                fontSize: blockHeight < 40 ? '0.72rem' : '0.82rem',
                 color: isAvail ? '#065f46' : '#991b1b',
                 textAlign: 'center',
-                lineHeight: 1.2
+                lineHeight: 1.2,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4
               }}>
+                {(item.isRecurring || item.recurrenceRuleId) && (
+                  <span title="Horário recorrente semanal">🔁</span>
+                )}
                 {isAvail ? t('freeBadge') : t('busyBadge')}
               </div>
               <div style={{
-                fontSize: blockHeight < 40 ? '0.68rem' : '0.74rem',
+                fontSize: blockHeight < 40 ? '0.65rem' : '0.72rem',
                 fontWeight: 600,
                 color: isAvail ? '#047857' : '#b91c1c',
                 textAlign: 'center',
-                marginTop: 2
+                marginTop: 1
               }}>
                 {item.startTime} – {item.endTime}
               </div>
 
-              {/* Botão de exclusão */}
+              {/* Botão de exclusão rápida */}
               <button
                 type="button"
                 onClick={(e) => {
@@ -697,34 +995,130 @@ export default function CalendarAvailabilityView({
           </span>
         </div>
 
-        {/* Seletor de Visões: Mês | Semana | Dia | Sugestões */}
-        <div style={{ display: 'flex', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }} data-tour="calendar-view-mode-selector">
-          {[
-            { id: 'month', label: t('viewMonth') },
-            { id: 'week', label: t('viewWeek') },
-            { id: 'day', label: t('viewDay') },
-            { id: 'suggestions', label: `💡 ${t('viewSuggestions')} (${suggestionsList.length})` }
-          ].map(({ id, label }) => {
-            const isActive = viewMode === id;
-            return (
-              <button
-                key={id}
-                onClick={() => setViewMode(id)}
-                data-tour={id === 'suggestions' ? 'date-suggestions-tab-btn' : undefined}
-                style={{
-                  padding: '0.45rem 0.85rem',
-                  fontSize: '0.825rem',
-                  fontWeight: 700,
-                  background: isActive ? 'var(--primary)' : 'white',
-                  color: isActive ? 'white' : 'var(--text-muted)'
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
+        {/* Ações da Barra: Minha Rotina Padrão + Seletor de Visões */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+          {currentUser && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setIsRoutineModalOpen(true)}
+              title="Gerenciar rotinas e disponibilidades salvas no seu perfil"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontWeight: 700,
+                fontSize: '0.825rem',
+                padding: '0.45rem 0.85rem',
+                border: '1.5px solid var(--border-color)',
+                background: 'white'
+              }}
+            >
+              <RotateCcw size={15} color="var(--primary)" />
+              <span>Minha Rotina Padrão</span>
+              {userRoutines.length > 0 && (
+                <span style={{
+                  fontSize: '0.7rem',
+                  fontWeight: 800,
+                  background: '#e0f2fe',
+                  color: '#0369a1',
+                  padding: '0.1rem 0.45rem',
+                  borderRadius: 12
+                }}>
+                  {userRoutines.length}
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* Seletor de Visões: Mês | Semana | Dia | Sugestões */}
+          <div style={{ display: 'flex', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }} data-tour="calendar-view-mode-selector">
+            {[
+              { id: 'month', label: t('viewMonth') },
+              { id: 'week', label: t('viewWeek') },
+              { id: 'day', label: t('viewDay') },
+              { id: 'suggestions', label: `💡 ${t('viewSuggestions')} (${suggestionsList.length})` }
+            ].map(({ id, label }) => {
+              const isActive = viewMode === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setViewMode(id)}
+                  data-tour={id === 'suggestions' ? 'date-suggestions-tab-btn' : undefined}
+                  style={{
+                    padding: '0.45rem 0.85rem',
+                    fontSize: '0.825rem',
+                    fontWeight: 700,
+                    background: isActive ? 'var(--primary)' : 'white',
+                    color: isActive ? 'white' : 'var(--text-muted)'
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
+
+      {/* Banner Proativo: Aplicar Rotina do Perfil (Requirement 3) */}
+      {showRoutinePrompt && userRoutines.length > 0 && (
+        <div style={{
+          background: 'linear-gradient(135deg, #f0fdf4 0%, #eff6ff 100%)',
+          border: '1.5px solid #bbf7d0',
+          borderRadius: 'var(--radius-md)',
+          padding: '0.75rem 1rem',
+          marginBottom: '1rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          boxShadow: 'var(--shadow-sm)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: '#dcfce7',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <Sparkles size={18} color="#166534" />
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#166534' }}>
+                Você possui {userRoutines.length} regra(s) de rotina salva(s) no seu perfil
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                Ex: <strong>{userRoutines[0]?.title}</strong> ({userRoutines[0]?.startTime}–{userRoutines[0]?.endTime}). Deseja aplicá-las a este evento?
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleApplySavedRoutinesToEvent}
+              style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 5 }}
+            >
+              <RotateCcw size={14} />
+              Aplicar Rotinas ao Evento
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setShowRoutinePrompt(false)}
+              style={{ padding: '0.4rem 0.65rem', fontSize: '0.8rem' }}
+            >
+              Agora não
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ======================================================== */}
       {/* 1. VISÃO DE MÊS (Month View)                             */}
@@ -777,12 +1171,20 @@ export default function CalendarAvailabilityView({
               return (
                 <div
                   key={idx}
-                  onClick={() => setTimeDialog({
-                    dateStr,
-                    startTime: '14:15',
-                    endTime: '18:45',
-                    status: 'available'
-                  })}
+                  onClick={() => {
+                    const dow = getDayOfWeekFromDateStr(dateStr);
+                    setTimeDialog({
+                      dateStr,
+                      startTime: '14:15',
+                      endTime: '18:45',
+                      status: 'available',
+                      title: '',
+                      isRecurring: false,
+                      recurrenceDays: [dow],
+                      saveToProfile: false,
+                      isEditing: false
+                    });
+                  }}
                   style={{
                     minWidth: 0,
                     overflow: 'hidden',
@@ -836,12 +1238,16 @@ export default function CalendarAvailabilityView({
                     )}
                   </div>
 
-                  {/* Badges dos blocos neste dia */}
+                  {/* Badges dos blocos neste dia com clique para editar */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1 }}>
                     {dayIntervals.map(item => (
                       <div
                         key={item.id}
-                        title={`${item.status === 'available' ? 'Livre' : 'Ocupado'}: ${item.startTime} às ${item.endTime}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditInterval(item);
+                        }}
+                        title={`Clique para editar: ${item.title ? item.title + ' - ' : ''}${item.status === 'available' ? 'Livre' : 'Ocupado'} (${item.startTime} às ${item.endTime})`}
                         style={{
                           fontSize: '0.7rem',
                           fontWeight: 700,
@@ -853,9 +1259,15 @@ export default function CalendarAvailabilityView({
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           maxWidth: '100%',
-                          boxSizing: 'border-box'
+                          boxSizing: 'border-box',
+                          cursor: 'pointer',
+                          transition: 'filter 0.15s ease'
                         }}
+                        onMouseEnter={(e) => { e.currentTarget.style.filter = 'brightness(0.92)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.filter = 'none'; }}
                       >
+                        {(item.isRecurring || item.recurrenceRuleId) && '🔁 '}
+                        {item.title ? `${item.title}: ` : ''}
                         {item.status === 'available' ? '✓ Livre' : '✗ Ocup.'} {item.startTime}–{item.endTime}
                       </div>
                     ))}
@@ -1347,29 +1759,27 @@ export default function CalendarAvailabilityView({
       )}
 
       {/* ======================================================== */}
-      {/* DIÁLOGO DE HORÁRIO COM ESCOLHA LIVRE/OCUPADO E MINUTOS   */}
+      {/* DIÁLOGO DE HORÁRIO COM EDIÇÃO, RECORRÊNCIA E PERFIL      */}
       {/* ======================================================== */}
       {timeDialog && (
         <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: 460 }}>
+          <div className="modal-card" style={{ maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="modal-header">
               <div>
                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase' }}>
-                  Cadastrar Período
+                  {timeDialog.isEditing ? 'Editar Bloco de Horário' : 'Cadastrar Período'}
                 </div>
-                <h3 className="modal-title">Livre ou Ocupado</h3>
+                <h3 className="modal-title">
+                  {timeDialog.status === 'available' ? '🟢 Disponibilidade' : '🔴 Indisponibilidade'}
+                </h3>
               </div>
               <button className="modal-close-btn" onClick={() => setTimeDialog(null)}>
                 <X size={20} />
               </button>
             </div>
 
-            <div style={{ marginBottom: '1rem', fontSize: '0.9rem', color: 'var(--text-main)', fontWeight: 700 }}>
-              Dia: <strong>{timeDialog.dateStr}</strong>
-            </div>
-
             {/* Seleção se é Livre ou Ocupado */}
-            <div className="form-group">
+            <div className="form-group" style={{ marginBottom: '1rem' }}>
               <label className="form-label">Você estará livre ou ocupado nesta faixa?</label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                 <button
@@ -1382,7 +1792,8 @@ export default function CalendarAvailabilityView({
                     fontWeight: 700,
                     border: `1.5px solid ${timeDialog.status === 'available' ? 'var(--color-available)' : 'var(--border-color)'}`,
                     background: timeDialog.status === 'available' ? 'var(--color-available-bg)' : 'white',
-                    color: timeDialog.status === 'available' ? '#065f46' : 'var(--text-muted)'
+                    color: timeDialog.status === 'available' ? '#065f46' : 'var(--text-muted)',
+                    cursor: 'pointer'
                   }}
                 >
                   🟢 Livre / Disponível
@@ -1397,7 +1808,8 @@ export default function CalendarAvailabilityView({
                     fontWeight: 700,
                     border: `1.5px solid ${timeDialog.status === 'unavailable' ? 'var(--color-unavailable)' : 'var(--border-color)'}`,
                     background: timeDialog.status === 'unavailable' ? 'var(--color-unavailable-bg)' : 'white',
-                    color: timeDialog.status === 'unavailable' ? '#991b1b' : 'var(--text-muted)'
+                    color: timeDialog.status === 'unavailable' ? '#991b1b' : 'var(--text-muted)',
+                    cursor: 'pointer'
                   }}
                 >
                   🔴 Ocupado
@@ -1405,8 +1817,43 @@ export default function CalendarAvailabilityView({
               </div>
             </div>
 
+            {/* Título ou Motivo Opcional */}
+            <div className="form-group" style={{ marginBottom: '1rem' }}>
+              <label className="form-label">Título ou Motivo (opcional)</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Ex: Aulas na faculdade, Treino, Trabalho..."
+                value={timeDialog.title || ''}
+                onChange={(e) => setTimeDialog({ ...timeDialog, title: e.target.value })}
+              />
+            </div>
+
+            {/* Data e Dia da Semana */}
+            <div className="form-group" style={{ marginBottom: '1rem' }}>
+              <label className="form-label">Data do Bloco</label>
+              <input
+                type="date"
+                className="form-input"
+                value={timeDialog.dateStr}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  const newDow = getDayOfWeekFromDateStr(newDate);
+                  setTimeDialog({
+                    ...timeDialog,
+                    dateStr: newDate,
+                    recurrenceDays: timeDialog.isRecurring ? timeDialog.recurrenceDays : [newDow]
+                  });
+                }}
+                required
+              />
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                {DAY_NAMES[getDayOfWeekFromDateStr(timeDialog.dateStr)]?.full}
+              </div>
+            </div>
+
             {/* Ajuste Fino de Horário com Minutos */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
               <div>
                 <label className="form-label">Início (HH:MM)</label>
                 <input
@@ -1430,7 +1877,7 @@ export default function CalendarAvailabilityView({
             </div>
 
             {/* Atalhos Rápidos */}
-            <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ marginBottom: '1.25rem' }}>
               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
                 Atalhos rápidos:
               </span>
@@ -1466,24 +1913,407 @@ export default function CalendarAvailabilityView({
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setTimeDialog(null)}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => {
-                  handleSaveInterval(timeDialog.dateStr, timeDialog.startTime, timeDialog.endTime, timeDialog.status);
-                }}
-              >
-                Confirmar e Salvar
+            {/* Seção de Recorrência (Requirement 2) */}
+            <div style={{
+              background: '#f8fafc',
+              border: '1.5px solid #e2e8f0',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.85rem',
+              marginBottom: '1rem'
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-main)' }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(timeDialog.isRecurring)}
+                  onChange={(e) => {
+                    const isChecked = e.target.checked;
+                    const currentDow = getDayOfWeekFromDateStr(timeDialog.dateStr);
+                    setTimeDialog({
+                      ...timeDialog,
+                      isRecurring: isChecked,
+                      recurrenceDays: isChecked ? (timeDialog.recurrenceDays?.length ? timeDialog.recurrenceDays : [currentDow]) : []
+                    });
+                  }}
+                  style={{ width: 16, height: 16, cursor: 'pointer' }}
+                />
+                <RotateCcw size={15} color="var(--primary)" />
+                <span>Repetir semanalmente (Recorrência)</span>
+              </label>
+
+              {timeDialog.isRecurring && (
+                <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                    Selecione os dias da semana em que este horário se repete (ex: aulas nas terças à noite):
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                    {DAY_NAMES.map(d => {
+                      const isSelected = (timeDialog.recurrenceDays || []).includes(d.id);
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => {
+                            const cur = timeDialog.recurrenceDays || [];
+                            const updated = isSelected ? cur.filter(x => x !== d.id) : [...cur, d.id];
+                            setTimeDialog({ ...timeDialog, recurrenceDays: updated });
+                          }}
+                          style={{
+                            padding: '0.3rem 0.65rem',
+                            borderRadius: 'var(--radius-sm)',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            border: `1.5px solid ${isSelected ? 'var(--primary)' : 'var(--border-color)'}`,
+                            background: isSelected ? 'var(--primary)' : 'white',
+                            color: isSelected ? 'white' : 'var(--text-muted)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {d.short}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {timeDialog.isEditing && timeDialog.recurrenceRuleId && (
+                    <div style={{ fontSize: '0.8rem', background: '#ffffff', padding: '0.65rem', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+                      <span style={{ fontWeight: 700, display: 'block', marginBottom: 4, color: 'var(--text-main)' }}>
+                        Escopo da alteração:
+                      </span>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, cursor: 'pointer' }}>
+                        <input
+                          type="radio"
+                          name="editScope"
+                          value="all"
+                          checked={timeDialog.editScope === 'all'}
+                          onChange={() => setTimeDialog({ ...timeDialog, editScope: 'all' })}
+                        />
+                        <span>Aplicar a todas as ocorrências deste horário</span>
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                        <input
+                          type="radio"
+                          name="editScope"
+                          value="single"
+                          checked={timeDialog.editScope === 'single'}
+                          onChange={() => setTimeDialog({ ...timeDialog, editScope: 'single' })}
+                        />
+                        <span>Alterar apenas nesta data ({timeDialog.dateStr})</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Seção de Vínculo com Perfil do Usuário (Requirement 3) */}
+            <div style={{
+              background: '#f0fdf4',
+              border: '1.5px solid #bbf7d0',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.85rem',
+              marginBottom: '1.5rem'
+            }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(timeDialog.saveToProfile)}
+                  onChange={(e) => setTimeDialog({ ...timeDialog, saveToProfile: e.target.checked })}
+                  style={{ width: 16, height: 16, marginTop: 2, cursor: 'pointer' }}
+                />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#166534', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Bookmark size={15} color="#166534" />
+                    Salvar no meu perfil (reutilizar em outros eventos)
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#4b5563', marginTop: 2 }}>
+                    Guarda esta regra na sua rotina pessoal para que você possa aplicá-la com 1 clique em qualquer outro evento que participar (ou desmarque para usar apenas neste evento).
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            {/* Ações do Rodapé */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div>
+                {timeDialog.isEditing && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteFromModal}
+                    style={{
+                      background: '#fee2e2',
+                      color: '#dc2626',
+                      border: '1px solid #fca5a5',
+                      padding: '0.55rem 0.85rem',
+                      borderRadius: 'var(--radius-sm)',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Trash2 size={15} />
+                    Excluir Bloco
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setTimeDialog(null)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleSaveIntervalModal}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Save size={16} />
+                  {timeDialog.isEditing ? 'Salvar Alterações' : 'Confirmar e Salvar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL DE GERENCIAMENTO DE ROTINA DO PERFIL (Requirement 3) */}
+      {/* ======================================================== */}
+      {isRoutineModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-card" style={{ maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="modal-header">
+              <div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase' }}>
+                  Perfil do Participante
+                </div>
+                <h3 className="modal-title">Minha Rotina Padrão</h3>
+              </div>
+              <button className="modal-close-btn" onClick={() => setIsRoutineModalOpen(false)}>
+                <X size={20} />
               </button>
             </div>
+
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+              Cadastre suas disponibilidades ou indisponibilidades fixas da semana (ex: aulas nas terças à noite, horário comercial). Elas ficam vinculadas ao seu usuário e podem ser aplicadas em qualquer evento que você desejar.
+            </p>
+
+            {/* Ação rápida de aplicar ao evento atual */}
+            {userRoutines.length > 0 && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleApplySavedRoutinesToEvent}
+                  style={{ width: '100%', padding: '0.65rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 700 }}
+                >
+                  <RotateCcw size={16} />
+                  Aplicar Minhas Rotinas Salvas a Este Evento
+                </button>
+              </div>
+            )}
+
+            {/* Lista de Rotinas Existentes */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
+                Regras Salvas ({userRoutines.length})
+              </div>
+
+              {userRoutines.length === 0 ? (
+                <div style={{ padding: '1.25rem', textAlign: 'center', background: '#f8fafc', borderRadius: 'var(--radius-sm)', border: '1px dashed #cbd5e1', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                  Nenhuma rotina cadastrada ainda. Crie uma abaixo para reutilizar em múltiplos eventos!
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {userRoutines.map(r => {
+                    const daysLabel = (r.daysOfWeek || [])
+                      .map(id => DAY_NAMES.find(d => d.id === id)?.short)
+                      .filter(Boolean)
+                      .join(', ');
+
+                    const isAvail = r.status === 'available';
+
+                    return (
+                      <div
+                        key={r.id}
+                        style={{
+                          padding: '0.75rem',
+                          borderRadius: 'var(--radius-sm)',
+                          border: `1.5px solid ${isAvail ? '#bbf7d0' : '#fecaca'}`,
+                          background: isAvail ? '#f0fdf4' : '#fef2f2',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '0.75rem'
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: '0.88rem', color: isAvail ? '#166534' : '#991b1b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span>{isAvail ? '🟢 Livre' : '🔴 Ocupado'}</span>
+                            <span>•</span>
+                            <span>{r.title}</span>
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: '#4b5563', marginTop: 2 }}>
+                            Dias: <strong>{daysLabel || 'Todos'}</strong> • Horário: <strong>{r.startTime} às {r.endTime}</strong>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRoutine(r.id)}
+                          style={{
+                            background: 'white',
+                            border: '1px solid #fca5a5',
+                            color: '#dc2626',
+                            borderRadius: '50%',
+                            width: 28,
+                            height: 28,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            flexShrink: 0
+                          }}
+                          title="Excluir regra de rotina"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Formulário para Cadastrar Nova Regra de Rotina */}
+            <form onSubmit={handleCreateRoutineSubmit} style={{ background: '#f8fafc', padding: '1rem', borderRadius: 'var(--radius-sm)', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: 800, fontSize: '0.88rem', marginBottom: '0.75rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Plus size={16} color="var(--primary)" />
+                Cadastrar Nova Regra de Rotina
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                <label className="form-label">Título da Rotina</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Ex: Aulas nas terças à noite, Treino, Plantão..."
+                  value={newRoutineForm.title}
+                  onChange={(e) => setNewRoutineForm({ ...newRoutineForm, title: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                <label className="form-label">Tipo</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setNewRoutineForm({ ...newRoutineForm, status: 'available' })}
+                    style={{
+                      padding: '0.45rem',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '0.825rem',
+                      fontWeight: 700,
+                      border: `1.5px solid ${newRoutineForm.status === 'available' ? 'var(--color-available)' : 'var(--border-color)'}`,
+                      background: newRoutineForm.status === 'available' ? 'var(--color-available-bg)' : 'white',
+                      color: newRoutineForm.status === 'available' ? '#065f46' : 'var(--text-muted)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🟢 Livre
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewRoutineForm({ ...newRoutineForm, status: 'unavailable' })}
+                    style={{
+                      padding: '0.45rem',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '0.825rem',
+                      fontWeight: 700,
+                      border: `1.5px solid ${newRoutineForm.status === 'unavailable' ? 'var(--color-unavailable)' : 'var(--border-color)'}`,
+                      background: newRoutineForm.status === 'unavailable' ? 'var(--color-unavailable-bg)' : 'white',
+                      color: newRoutineForm.status === 'unavailable' ? '#991b1b' : 'var(--text-muted)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🔴 Ocupado
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                <label className="form-label">Dias da Semana</label>
+                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                  {DAY_NAMES.map(d => {
+                    const isSelected = newRoutineForm.daysOfWeek.includes(d.id);
+                    return (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => {
+                          const cur = newRoutineForm.daysOfWeek;
+                          const updated = isSelected ? cur.filter(x => x !== d.id) : [...cur, d.id];
+                          setNewRoutineForm({ ...newRoutineForm, daysOfWeek: updated });
+                        }}
+                        style={{
+                          padding: '0.3rem 0.65rem',
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          border: `1.5px solid ${isSelected ? 'var(--primary)' : 'var(--border-color)'}`,
+                          background: isSelected ? 'var(--primary)' : 'white',
+                          color: isSelected ? 'white' : 'var(--text-muted)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {d.short}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                <div>
+                  <label className="form-label">Início</label>
+                  <input
+                    type="time"
+                    className="form-input"
+                    value={newRoutineForm.startTime}
+                    onChange={(e) => setNewRoutineForm({ ...newRoutineForm, startTime: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Término</label>
+                  <input
+                    type="time"
+                    className="form-input"
+                    value={newRoutineForm.endTime}
+                    onChange={(e) => setNewRoutineForm({ ...newRoutineForm, endTime: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.5rem 1rem' }}
+                >
+                  <Bookmark size={15} />
+                  Salvar Regra no Perfil
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
