@@ -16,7 +16,7 @@ export default function AdSenseBanner({
 
   useEffect(() => {
     // Evita inicialização duplicada no React StrictMode
-    if (initializedRef.current) return;
+    if (!slot || initializedRef.current) return;
 
     try {
       if (typeof window !== 'undefined') {
@@ -27,7 +27,12 @@ export default function AdSenseBanner({
       // Bloqueadores de anúncio ou erro de script são tratados silenciosamente
       console.debug('AdSense initialization notice:', e.message);
     }
-  }, []);
+  }, [slot]);
+
+  // Se nenhum slot for informado, não renderiza container vazio para evitar blocos em branco indesejados
+  if (!slot) {
+    return null;
+  }
 
   return (
     <div
@@ -36,7 +41,7 @@ export default function AdSenseBanner({
         overflow: 'hidden',
         textAlign: 'center',
         margin: '1.25rem 0',
-        minHeight: slot ? '90px' : 'auto',
+        minHeight: '90px',
         ...style
       }}
       aria-label="Publicidade"
@@ -46,7 +51,7 @@ export default function AdSenseBanner({
         className="adsbygoogle"
         style={{ display: 'block', ...style }}
         data-ad-client={client}
-        {...(slot ? { 'data-ad-slot': slot } : {})}
+        data-ad-slot={slot}
         data-ad-format={format}
         data-full-width-responsive={responsive}
       />

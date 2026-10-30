@@ -104,15 +104,17 @@ export function deriveIntervalsFromAvailabilities(availMap) {
 export default function CalendarAvailabilityView({
   event,
   currentUser,
+  isOrganizer: propIsOrganizer,
   onSaveAvailability,
   onAddSuggestion,
   onVoteSuggestion,
   onConfirmSlot,
+  onRemoveTimeSuggestion,
   controlledViewMode,
   onViewModeChange
 }) {
   const { t, daysOfWeek, monthNames, lang } = useI18n();
-  const isOrganizer = currentUser && event.organizer?.id === currentUser.id;
+  const isOrganizer = propIsOrganizer ?? (currentUser && event.organizer?.id === currentUser.id);
 
   // Encontra participante atual
   const participantData = event.participants.find(p => p.id === currentUser?.id) || {
@@ -1254,22 +1256,55 @@ export default function CalendarAvailabilityView({
                         </button>
                       </div>
 
-                      {/* Definir como Oficial pelo Organizador */}
+                      {/* Ações do Organizador */}
                       {isOrganizer && (
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          onClick={() => onConfirmSlot({
-                            date: sug.date,
-                            startTime: sug.startTime,
-                            endTime: sug.endTime,
-                            durationMinutes: timeToMinutes(sug.endTime) - timeToMinutes(sug.startTime)
-                          })}
-                          style={{ fontSize: '0.825rem', padding: '0.45rem 1rem' }}
-                        >
-                          <Check size={15} />
-                          Definir como Horário Oficial
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => onConfirmSlot({
+                              date: sug.date,
+                              startTime: sug.startTime,
+                              endTime: sug.endTime,
+                              durationMinutes: timeToMinutes(sug.endTime) - timeToMinutes(sug.startTime)
+                            })}
+                            style={{ fontSize: '0.825rem', padding: '0.45rem 1rem' }}
+                          >
+                            <Check size={15} />
+                            Definir como Horário Oficial
+                          </button>
+
+                          {onRemoveTimeSuggestion && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(t('confirmDeleteSuggestion') || 'Deseja realmente excluir esta sugestão de horário?')) {
+                                  onRemoveTimeSuggestion(sug.id);
+                                }
+                              }}
+                              style={{
+                                fontSize: '0.825rem',
+                                padding: '0.45rem 0.8rem',
+                                background: 'white',
+                                border: '1px solid #fecaca',
+                                borderRadius: 'var(--radius-sm)',
+                                color: '#dc2626',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                              title={t('btnDeleteSuggestion') || 'Excluir sugestão de horário'}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = '#fee2e2'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; }}
+                            >
+                              <Trash2 size={14} />
+                              <span>{t('btnDeleteSuggestion') || 'Excluir'}</span>
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>

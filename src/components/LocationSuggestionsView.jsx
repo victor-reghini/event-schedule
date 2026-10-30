@@ -12,9 +12,11 @@ import {
   AlertCircle,
   ExternalLink,
   MessageSquare,
-  Award
+  Award,
+  Trash2
 } from 'lucide-react';
 import Avatar from './Avatar';
+import { useI18n } from '../services/i18n';
 
 export default function LocationSuggestionsView({
   event,
@@ -23,8 +25,10 @@ export default function LocationSuggestionsView({
   onToggleAllowSuggestions,
   onAddLocationSuggestion,
   onVoteLocation,
-  onSelectOfficialLocation
+  onSelectOfficialLocation,
+  onRemoveLocationSuggestion
 }) {
+  const { t } = useI18n();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [address, setAddress] = useState('');
@@ -378,21 +382,54 @@ export default function LocationSuggestionsView({
                     </button>
                   </div>
 
-                  {/* Ação do Administrador: Definir como Local Oficial */}
+                  {/* Ação do Administrador: Definir como Local Oficial ou Excluir */}
                   {isOrganizer && (
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      onClick={() => onSelectOfficialLocation(loc.title, loc.address)}
-                      style={{
-                        fontSize: '0.825rem',
-                        padding: '0.45rem 1rem',
-                        background: isCurrentOfficial ? '#15803d' : 'var(--primary)'
-                      }}
-                    >
-                      <Check size={15} />
-                      {isCurrentOfficial ? 'Local Oficial Selecionado' : 'Definir como Local Oficial'}
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        onClick={() => onSelectOfficialLocation(loc.title, loc.address)}
+                        style={{
+                          fontSize: '0.825rem',
+                          padding: '0.45rem 1rem',
+                          background: isCurrentOfficial ? '#15803d' : 'var(--primary)'
+                        }}
+                      >
+                        <Check size={15} />
+                        {isCurrentOfficial ? 'Local Oficial Selecionado' : 'Definir como Local Oficial'}
+                      </button>
+
+                      {onRemoveLocationSuggestion && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(t('confirmDeleteLocation') || 'Deseja realmente excluir esta sugestão de local?')) {
+                              onRemoveLocationSuggestion(loc.id);
+                            }
+                          }}
+                          style={{
+                            fontSize: '0.825rem',
+                            padding: '0.45rem 0.8rem',
+                            background: 'white',
+                            border: '1px solid #fecaca',
+                            borderRadius: 'var(--radius-sm)',
+                            color: '#dc2626',
+                            fontWeight: 700,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                          title={t('btnDeleteLocation') || 'Excluir sugestão de local'}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = '#fee2e2'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; }}
+                        >
+                          <Trash2 size={14} />
+                          <span>{t('btnDeleteLocation') || 'Excluir'}</span>
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

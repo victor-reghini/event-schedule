@@ -28,7 +28,7 @@ const TRANSLATIONS = {
   pt: {
     // Brand & Header
     brandTitle: 'Sincroniza',
-    brandTag: 'Grupos & Presencial',
+    brandTag: 'Agendas Compartilhadas',
     myEvents: 'Meus Eventos',
     createEvent: 'Criar Evento',
     login: 'Entrar / Cadastrar',
@@ -82,6 +82,8 @@ const TRANSLATIONS = {
     btnAvailable: 'Estou Livre',
     btnUnavailable: 'Não Posso',
     btnConfirmSlot: 'Confirmar',
+    btnDeleteSuggestion: 'Excluir',
+    confirmDeleteSuggestion: 'Deseja excluir esta sugestão de dia/horário?',
     noneYet: 'Nenhum ainda',
 
     // Overview Locations Section
@@ -95,6 +97,8 @@ const TRANSLATIONS = {
     btnApprove: 'Aprovar',
     btnReject: 'Reprovar',
     btnSetOfficial: 'Definir Oficial',
+    btnDeleteLocation: 'Excluir',
+    confirmDeleteLocation: 'Deseja excluir esta sugestão de local?',
     suggestedBy: 'Sugerido por',
 
     // Overview Heatmap Section
@@ -266,7 +270,7 @@ const TRANSLATIONS = {
   },
   en: {
     brandTitle: 'Sincroniza',
-    brandTag: 'Groups & In-Person',
+    brandTag: 'Shared Calendars',
     myEvents: 'My Events',
     createEvent: 'Create Event',
     login: 'Login / Register',
@@ -316,6 +320,8 @@ const TRANSLATIONS = {
     btnAvailable: 'I am Free',
     btnUnavailable: 'Cannot Attend',
     btnConfirmSlot: 'Confirm',
+    btnDeleteSuggestion: 'Delete',
+    confirmDeleteSuggestion: 'Are you sure you want to delete this date/time suggestion?',
     noneYet: 'None yet',
 
     locationsTitle: 'Proposed Venues for the Meetup',
@@ -328,6 +334,8 @@ const TRANSLATIONS = {
     btnApprove: 'Approve',
     btnReject: 'Reject',
     btnSetOfficial: 'Set as Official',
+    btnDeleteLocation: 'Delete',
+    confirmDeleteLocation: 'Are you sure you want to delete this venue suggestion?',
     suggestedBy: 'Suggested by',
 
     heatmapTitle: 'Consolidated Availability Heatmap',
@@ -492,7 +500,7 @@ const TRANSLATIONS = {
   },
   es: {
     brandTitle: 'Sincroniza',
-    brandTag: 'Grupos y Presencial',
+    brandTag: 'Agendas Compartidas',
     myEvents: 'Mis Eventos',
     createEvent: 'Crear Evento',
     login: 'Iniciar Sesión / Registro',
@@ -542,6 +550,8 @@ const TRANSLATIONS = {
     btnAvailable: 'Estoy Libre',
     btnUnavailable: 'No Puedo',
     btnConfirmSlot: 'Confirmar',
+    btnDeleteSuggestion: 'Eliminar',
+    confirmDeleteSuggestion: '¿Deseas eliminar esta sugerencia de día y hora?',
     noneYet: 'Ninguno aún',
 
     locationsTitle: 'Lugares Sugeridos para el Encuentro',
@@ -554,6 +564,8 @@ const TRANSLATIONS = {
     btnApprove: 'Aprobar',
     btnReject: 'Rechazar',
     btnSetOfficial: 'Fijar Oficial',
+    btnDeleteLocation: 'Eliminar',
+    confirmDeleteLocation: '¿Deseas eliminar esta sugerencia de lugar?',
     suggestedBy: 'Sugerido por',
 
     heatmapTitle: 'Mapa Consolidado de Disponibilidades',
@@ -718,7 +730,7 @@ const TRANSLATIONS = {
   },
   it: {
     brandTitle: 'Sincroniza',
-    brandTag: 'Gruppi e di Persona',
+    brandTag: 'Agende Condivise',
     myEvents: 'I Miei Eventi',
     createEvent: 'Crea Evento',
     login: 'Accedi / Registrati',
@@ -768,6 +780,8 @@ const TRANSLATIONS = {
     btnAvailable: 'Sono Libero',
     btnUnavailable: 'Non Posso',
     btnConfirmSlot: 'Conferma',
+    btnDeleteSuggestion: 'Elimina',
+    confirmDeleteSuggestion: 'Vuoi davvero eliminare questo orario suggerito?',
     noneYet: 'Nessuno ancora',
 
     locationsTitle: 'Luoghi Suggeriti per l\'Incontro',
@@ -780,6 +794,8 @@ const TRANSLATIONS = {
     btnApprove: 'Approva',
     btnReject: 'Rifiuta',
     btnSetOfficial: 'Imposta Ufficiale',
+    btnDeleteLocation: 'Elimina',
+    confirmDeleteLocation: 'Vuoi davvero eliminare questo luogo suggerito?',
     suggestedBy: 'Suggerito da',
 
     heatmapTitle: 'Mappa Consolidata delle Disponibilità',
@@ -944,7 +960,7 @@ const TRANSLATIONS = {
   },
   fr: {
     brandTitle: 'Sincroniza',
-    brandTag: 'Groupes & Présentiel',
+    brandTag: 'Agendas Partagés',
     myEvents: 'Mes Événements',
     createEvent: 'Créer un Événement',
     login: 'Connexion / Inscription',
@@ -994,6 +1010,8 @@ const TRANSLATIONS = {
     btnAvailable: 'Je suis Libre',
     btnUnavailable: 'Je ne Peux Pas',
     btnConfirmSlot: 'Confirmer',
+    btnDeleteSuggestion: 'Supprimer',
+    confirmDeleteSuggestion: 'Voulez-vous vraiment supprimer ce créneau suggéré ?',
     noneYet: 'Aucun pour l\'instant',
 
     locationsTitle: 'Lieux Proposés pour la Rencontre',
@@ -1006,6 +1024,8 @@ const TRANSLATIONS = {
     btnApprove: 'Approuver',
     btnReject: 'Rejeter',
     btnSetOfficial: 'Définir comme Officiel',
+    btnDeleteLocation: 'Supprimer',
+    confirmDeleteLocation: 'Voulez-vous vraiment supprimer ce lieu suggéré ?',
     suggestedBy: 'Suggéré par',
 
     heatmapTitle: 'Carte Consolidée des Disponibilités',

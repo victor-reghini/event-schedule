@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Calendar,
   Clock,
@@ -16,7 +16,9 @@ import {
   X,
   CheckCheck,
   XCircle,
-  RotateCcw
+  RotateCcw,
+  ChevronDown,
+  Check
 } from 'lucide-react';
 import Navbar from './components/Navbar';
 import SmartSuggestions from './components/SmartSuggestions';
@@ -44,8 +46,10 @@ import {
   updateEventFieldsInDb,
   addTimeSuggestionInDb,
   voteTimeSuggestionInDb,
+  removeTimeSuggestionInDb,
   addLocationSuggestionInDb,
   voteLocationInDb,
+  removeLocationSuggestionInDb,
   createDemoEventForUser
 } from './services/storage';
 import {
@@ -80,6 +84,25 @@ export default function App() {
   const [calendarViewMode, setCalendarViewMode] = useState('week');
   const [joinConfirmation, setJoinConfirmation] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
+  const [isMobileTabsOpen, setIsMobileTabsOpen] = useState(false);
+  const mobileTabsRef = useRef(null);
+
+  // Fecha o menu de abas mobile ao clicar fora
+  useEffect(() => {
+    function handleClickOutsideTabs(event) {
+      if (mobileTabsRef.current && !mobileTabsRef.current.contains(event.target)) {
+        setIsMobileTabsOpen(false);
+      }
+    }
+    if (isMobileTabsOpen) {
+      document.addEventListener('mousedown', handleClickOutsideTabs);
+      document.addEventListener('touchstart', handleClickOutsideTabs);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutsideTabs);
+      document.removeEventListener('touchstart', handleClickOutsideTabs);
+    };
+  }, [isMobileTabsOpen]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -592,6 +615,30 @@ export default function App() {
     }
   };
 
+  // Organizador remove uma sugestão de dia e horário
+  const handleRemoveTimeSuggestion = async (sugId) => {
+    if (!isOrganizer || !currentEvent) return;
+
+    const targetEventId = currentEvent.id;
+    setEvents(prevEvents =>
+      prevEvents.map(evt => {
+        if (evt.id !== targetEventId) return evt;
+        return {
+          ...evt,
+          customSuggestions: (evt.customSuggestions || []).filter(s => s.id !== sugId)
+        };
+      })
+    );
+
+    try {
+      await removeTimeSuggestionInDb(sugId);
+      showToast('Sugestão de horário removida com sucesso!');
+    } catch (err) {
+      showToast(err.message || 'Erro ao remover sugestão de horário.');
+      refreshEvents({ silent: true });
+    }
+  };
+
   // Alterna permissão de sugestões de locais pelo organizador
   const handleToggleLocationSuggestions = async (allowed) => {
     if (!isOrganizer || !currentEvent) return;
@@ -718,6 +765,30 @@ export default function App() {
       showToast(`Local oficial atualizado para "${title}"!`);
     } catch (err) {
       showToast(err.message || 'Erro ao definir local oficial.');
+      refreshEvents({ silent: true });
+    }
+  };
+
+  // Organizador remove uma sugestão de local
+  const handleRemoveLocationSuggestion = async (locationId) => {
+    if (!isOrganizer || !currentEvent) return;
+
+    const targetEventId = currentEvent.id;
+    setEvents(prevEvents =>
+      prevEvents.map(evt => {
+        if (evt.id !== targetEventId) return evt;
+        return {
+          ...evt,
+          locationSuggestions: (evt.locationSuggestions || []).filter(l => l.id !== locationId)
+        };
+      })
+    );
+
+    try {
+      await removeLocationSuggestionInDb(locationId);
+      showToast('Sugestão de local removida com sucesso!');
+    } catch (err) {
+      showToast(err.message || 'Erro ao remover sugestão de local.');
       refreshEvents({ silent: true });
     }
   };
@@ -1168,9 +1239,6 @@ export default function App() {
                 {isOrganizer ? t('manageParticipants') : t('viewParticipants')} ({currentEvent.participants?.length || 0})
               </button>
             </div>
-
-            {/* Publicidade Google AdSense */}
-            <AdSenseBanner style={{ marginTop: '1.25rem' }} />
           </aside>
 
           {/* Painel Direito: Abas de Votação, Sugestões do Algoritmo e Visão Geral */}
@@ -1210,51 +1278,131 @@ export default function App() {
               </div>
             )}
 
-            <div className="view-tabs" data-tour="view-tabs">
-              <button
-                className={`tab-btn ${activeTab === 'heatmap' ? 'active' : ''}`}
-                onClick={() => setActiveTab('heatmap')}
-                data-tour="tab-heatmap"
-              >
-                <Users size={17} />
-                <span>{t('tabGroupOverview')}</span>
-                {currentEvent.privacy === 'private' && (
-                  <Lock size={12} color="#b45309" />
-                )}
-              </button>
+            {/* Definição Unificada das Abas (Menu Dropdown no Mobile e Abas no Desktop) */}
+            {(() => {
+              const tabsConfig = [
+                {
+                  id: 'heatmap',
+                  label: t('tabGroupOverview'),
+                  icon: Users,
+                  badge: currentEvent.privacy === 'private' ? (
+                    <Lock size={12} color="#b45309" />
+                  ) : null,
+                  tourAttr: 'tab-heatmap'
+                },
+                {
+                  id: 'voting',
+                  label: t('tabMyAvailability'),
+                  icon: CalendarCheck2,
+                  badge: null,
+                  tourAttr: 'tab-voting'
+                },
+                {
+                  id: 'suggestions',
+                  label: t('tabSmartSuggestions'),
+                  icon: Sparkles,
+                  badge: null,
+                  tourAttr: 'tab-suggestions'
+                },
+                {
+                  id: 'locations',
+                  label: t('tabLocations'),
+                  icon: MapPin,
+                  badge: (currentEvent.locationSuggestions?.length > 0 || currentEvent.allowLocationSuggestions) ? (
+                    <span className="tab-badge" style={{ background: '#ecfdf5', color: '#166534' }}>
+                      {currentEvent.locationSuggestions?.length || 0}
+                    </span>
+                  ) : null,
+                  tourAttr: 'tab-locations'
+                }
+              ];
 
-              <button
-                className={`tab-btn ${activeTab === 'voting' ? 'active' : ''}`}
-                onClick={() => setActiveTab('voting')}
-                data-tour="tab-voting"
-              >
-                <CalendarCheck2 size={17} />
-                <span>{t('tabMyAvailability')}</span>
-              </button>
+              const currentTabObj = tabsConfig.find(tab => tab.id === activeTab) || tabsConfig[0];
+              const CurrentTabIcon = currentTabObj.icon;
 
-              <button
-                className={`tab-btn ${activeTab === 'suggestions' ? 'active' : ''}`}
-                onClick={() => setActiveTab('suggestions')}
-                data-tour="tab-suggestions"
-              >
-                <Sparkles size={17} />
-                <span>{t('tabSmartSuggestions')}</span>
-              </button>
+              return (
+                <>
+                  {/* Menu Dropdown de Abas para Mobile */}
+                  <div
+                    className="mobile-tab-menu-container"
+                    ref={mobileTabsRef}
+                    data-tour="view-tabs"
+                  >
+                    <button
+                      type="button"
+                      className="mobile-tab-menu-trigger"
+                      onClick={() => setIsMobileTabsOpen(prev => !prev)}
+                      aria-expanded={isMobileTabsOpen}
+                      aria-haspopup="listbox"
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                        <CurrentTabIcon size={18} color="var(--primary)" />
+                        <span>{currentTabObj.label}</span>
+                        {currentTabObj.badge}
+                      </div>
+                      <ChevronDown
+                        size={18}
+                        color="var(--text-muted)"
+                        style={{
+                          transform: isMobileTabsOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s ease'
+                        }}
+                      />
+                    </button>
 
-              <button
-                className={`tab-btn ${activeTab === 'locations' ? 'active' : ''}`}
-                onClick={() => setActiveTab('locations')}
-                data-tour="tab-locations"
-              >
-                <MapPin size={17} />
-                <span>{t('tabLocations')}</span>
-                {(currentEvent.locationSuggestions?.length > 0 || currentEvent.allowLocationSuggestions) && (
-                  <span className="tab-badge" style={{ background: '#ecfdf5', color: '#166534' }}>
-                    {currentEvent.locationSuggestions?.length || 0}
-                  </span>
-                )}
-              </button>
-            </div>
+                    {isMobileTabsOpen && (
+                      <div className="mobile-tab-menu-dropdown" role="listbox">
+                        {tabsConfig.map(tab => {
+                          const TabIcon = tab.icon;
+                          const isActive = activeTab === tab.id;
+                          return (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              role="option"
+                              aria-selected={isActive}
+                              data-tour={tab.tourAttr}
+                              className={`mobile-tab-menu-item ${isActive ? 'active' : ''}`}
+                              onClick={() => {
+                                setActiveTab(tab.id);
+                                setIsMobileTabsOpen(false);
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                                <TabIcon size={17} color={isActive ? 'var(--primary)' : 'var(--text-muted)'} />
+                                <span>{tab.label}</span>
+                                {tab.badge}
+                              </div>
+                              {isActive && <Check size={16} color="var(--primary)" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Abas Horizontais Tradicionais para Desktop */}
+                  <div className="view-tabs desktop-view-tabs" data-tour="view-tabs">
+                    {tabsConfig.map(tab => {
+                      const TabIcon = tab.icon;
+                      const isActive = activeTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          className={`tab-btn ${isActive ? 'active' : ''}`}
+                          onClick={() => setActiveTab(tab.id)}
+                          data-tour={tab.tourAttr}
+                        >
+                          <TabIcon size={17} />
+                          <span>{tab.label}</span>
+                          {tab.badge}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Conteúdo da Aba Ativa */}
             {activeTab === 'heatmap' && (
@@ -1265,9 +1413,11 @@ export default function App() {
                 onAddSuggestion={handleAddSuggestion}
                 onVoteSuggestion={handleVoteSuggestion}
                 onConfirmSlot={handleConfirmSlot}
+                onRemoveTimeSuggestion={handleRemoveTimeSuggestion}
                 onAddLocationSuggestion={handleAddLocationSuggestion}
                 onVoteLocation={handleVoteLocation}
                 onSelectOfficialLocation={handleSelectOfficialLocation}
+                onRemoveLocationSuggestion={handleRemoveLocationSuggestion}
                 onToggleAllowLocationSuggestions={handleToggleLocationSuggestions}
                 onOpenAuth={() => setIsAuthOpen(true)}
               />
@@ -1278,10 +1428,12 @@ export default function App() {
                 <CalendarAvailabilityView
                   event={currentEvent}
                   currentUser={currentUser}
+                  isOrganizer={isOrganizer}
                   onSaveAvailability={handleSaveAvailability}
                   onAddSuggestion={handleAddSuggestion}
                   onVoteSuggestion={handleVoteSuggestion}
                   onConfirmSlot={handleConfirmSlot}
+                  onRemoveTimeSuggestion={handleRemoveTimeSuggestion}
                   controlledViewMode={calendarViewMode}
                   onViewModeChange={setCalendarViewMode}
                 />
@@ -1322,6 +1474,7 @@ export default function App() {
                 onAddLocationSuggestion={handleAddLocationSuggestion}
                 onVoteLocation={handleVoteLocation}
                 onSelectOfficialLocation={handleSelectOfficialLocation}
+                onRemoveLocationSuggestion={handleRemoveLocationSuggestion}
               />
             )}
           </section>

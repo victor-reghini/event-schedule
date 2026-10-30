@@ -612,10 +612,91 @@ input, textarea, select {
   border-radius: var(--radius-full);
 }
 
+/* Mobile Navigation Tab Menu (visible on screens <= 768px) */
+.mobile-tab-menu-container {
+  display: none;
+  position: relative;
+  width: 100%;
+  margin-bottom: 1.25rem;
+  box-sizing: border-box;
+}
+
+.mobile-tab-menu-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.15rem;
+  background: #ffffff;
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.mobile-tab-menu-trigger:hover,
+.mobile-tab-menu-trigger:focus-visible {
+  border-color: var(--primary-hover);
+  background: #fafcff;
+}
+
+.mobile-tab-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xl);
+  z-index: 60;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0.4rem 0;
+  animation: fadeIn 0.15s ease-out;
+  box-sizing: border-box;
+}
+
+.mobile-tab-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.8rem 1.15rem;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: all 0.12s ease;
+  box-sizing: border-box;
+}
+
+.mobile-tab-menu-item:hover,
+.mobile-tab-menu-item:active {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.mobile-tab-menu-item.active {
+  background: #eff6ff;
+  color: var(--primary);
+  font-weight: 700;
+}
+
 /* View Container containment */
 .heatmap-view-section,
 .google-calendar-availability,
-.suggestions-grid {
+.suggestions-grid,
+.location-suggestions-section {
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -1196,20 +1277,31 @@ input, textarea, select {
   }
 
   .app-main {
-    margin: 0.65rem auto;
-    padding: 0 0.5rem 3.5rem 0.5rem;
+    margin: 0.85rem auto 3.5rem auto;
+    padding: 0 1rem;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
   .scheduler-card {
+    display: flex;
+    flex-direction: column;
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-sm);
     min-height: auto;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
   }
 
   .event-sidebar {
-    padding: 1.25rem 1rem;
+    padding: 1.35rem 1.15rem;
     border-right: none;
     border-bottom: 1px solid var(--border-color);
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .event-title {
@@ -1218,12 +1310,19 @@ input, textarea, select {
   }
 
   .event-content {
-    padding: 1rem 0.75rem;
+    padding: 1.35rem 1.15rem;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
   }
 
-  .view-tabs {
-    margin-bottom: 1.25rem;
-    padding-bottom: 4px;
+  .desktop-view-tabs {
+    display: none !important;
+  }
+
+  .mobile-tab-menu-container {
+    display: block;
   }
 
   /* Modals as bottom-sheet for touch thumb ergonomics */

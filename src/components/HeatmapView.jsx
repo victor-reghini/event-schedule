@@ -16,7 +16,8 @@ import {
   ExternalLink,
   Star,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Trash2
 } from 'lucide-react';
 import { calculateHeatmap, timeToMinutes } from '../services/schedulerAlgorithm';
 import { useI18n } from '../services/i18n';
@@ -29,9 +30,11 @@ export default function HeatmapView({
   onAddSuggestion,
   onVoteSuggestion,
   onConfirmSlot,
+  onRemoveTimeSuggestion,
   onAddLocationSuggestion,
   onVoteLocation,
   onSelectOfficialLocation,
+  onRemoveLocationSuggestion,
   onToggleAllowLocationSuggestions,
   onOpenAuth
 }) {
@@ -267,18 +270,48 @@ export default function HeatmapView({
                       <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--primary)' }}>
                         {formatDateFriendly(sug.date)} • {sug.startTime} – {sug.endTime}
                       </span>
-                      {sug.creator && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <Avatar
-                            src={sug.creator.avatar}
-                            name={sug.creator.name}
-                            size={20}
-                          />
-                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                            {sug.creator.name}
-                          </span>
-                        </div>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {sug.creator && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <Avatar
+                              src={sug.creator.avatar}
+                              name={sug.creator.name}
+                              size={20}
+                            />
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                              {sug.creator.name}
+                            </span>
+                          </div>
+                        )}
+                        {isOrganizer && onRemoveTimeSuggestion && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(t('confirmDeleteSuggestion'))) {
+                                onRemoveTimeSuggestion(sug.id);
+                              }
+                            }}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              color: '#94a3b8',
+                              padding: '0.2rem',
+                              borderRadius: 'var(--radius-sm)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title={t('btnDeleteSuggestion')}
+                            aria-label={t('btnDeleteSuggestion')}
+                            onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.background = '#fee2e2'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent'; }}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {sug.title && (
@@ -474,7 +507,7 @@ export default function HeatmapView({
                       <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)' }}>
                         {loc.title}
                       </div>
-                      <div style={{ display: 'flex', gap: 6, fontSize: '0.75rem', fontWeight: 800 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 800 }}>
                         <span style={{ color: '#059669', background: '#ecfdf5', padding: '0.15rem 0.45rem', borderRadius: 4 }}>
                           👍 {approves}
                         </span>
@@ -482,6 +515,34 @@ export default function HeatmapView({
                           <span style={{ color: '#dc2626', background: '#fee2e2', padding: '0.15rem 0.45rem', borderRadius: 4 }}>
                             👎 {rejects}
                           </span>
+                        )}
+                        {isOrganizer && onRemoveLocationSuggestion && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(t('confirmDeleteLocation'))) {
+                                onRemoveLocationSuggestion(loc.id);
+                              }
+                            }}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              color: '#94a3b8',
+                              padding: '0.2rem',
+                              borderRadius: 'var(--radius-sm)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title={t('btnDeleteLocation')}
+                            aria-label={t('btnDeleteLocation')}
+                            onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.background = '#fee2e2'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent'; }}
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         )}
                       </div>
                     </div>

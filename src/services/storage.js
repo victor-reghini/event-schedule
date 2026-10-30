@@ -392,6 +392,40 @@ export async function voteLocationInDb(locationId, userId, voteType, removeVote 
   }
 }
 
+export async function removeTimeSuggestionInDb(suggestionId) {
+  // Limpa votos da sugestão
+  await supabase
+    .from('time_suggestion_votes')
+    .delete()
+    .eq('suggestion_id', suggestionId);
+
+  const { error } = await supabase
+    .from('time_suggestions')
+    .delete()
+    .eq('id', suggestionId);
+
+  if (error) {
+    throw new Error(`Erro ao excluir sugestão de horário: ${error.message}`);
+  }
+}
+
+export async function removeLocationSuggestionInDb(locationId) {
+  // Limpa votos da sugestão de local
+  await supabase
+    .from('location_votes')
+    .delete()
+    .eq('location_id', locationId);
+
+  const { error } = await supabase
+    .from('location_suggestions')
+    .delete()
+    .eq('id', locationId);
+
+  if (error) {
+    throw new Error(`Erro ao excluir sugestão de local: ${error.message}`);
+  }
+}
+
 export async function createDemoEventForUser(currentUser) {
   const today = new Date();
   const upcomingDates = [2, 3, 4].map(offset => {
