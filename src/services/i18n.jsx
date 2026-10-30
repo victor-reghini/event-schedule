@@ -56,6 +56,12 @@ const TRANSLATIONS = {
     manageParticipants: 'Gerenciar Participantes',
     viewParticipants: 'Ver Participantes',
     privacyPrivateNotice: 'Visibilidade restrita ao organizador',
+    privacyPublicNotice: 'Respostas públicas para todos',
+    editEvent: 'Editar Evento',
+    editEventSubtitle: 'Atualize título, duração, local e descrição do evento',
+    btnSaveChanges: 'Salvar Alterações',
+    deleteEvent: 'Excluir Evento',
+    confirmDeleteEvent: 'Tem certeza que deseja excluir este evento? Esta ação não pode ser desfeita.',
 
     // Overview Hero
     heroTag: 'TELA PRINCIPAL DO EVENTO',
@@ -296,6 +302,12 @@ const TRANSLATIONS = {
     manageParticipants: 'Manage Participants',
     viewParticipants: 'View Participants',
     privacyPrivateNotice: 'Visibility restricted to organizer',
+    privacyPublicNotice: 'Public responses visible to all',
+    editEvent: 'Edit Event',
+    editEventSubtitle: 'Update event title, duration, location, and description',
+    btnSaveChanges: 'Save Changes',
+    deleteEvent: 'Delete Event',
+    confirmDeleteEvent: 'Are you sure you want to delete this event? This action cannot be undone.',
 
     heroTag: 'MAIN EVENT DASHBOARD',
     heroTitle: 'Group Overview',
@@ -526,6 +538,12 @@ const TRANSLATIONS = {
     manageParticipants: 'Gestionar Participantes',
     viewParticipants: 'Ver Participantes',
     privacyPrivateNotice: 'Visibilidad restringida al organizador',
+    privacyPublicNotice: 'Respuestas públicas para todos',
+    editEvent: 'Editar Evento',
+    editEventSubtitle: 'Actualice título, duración, lugar y descripción del evento',
+    btnSaveChanges: 'Guardar Cambios',
+    deleteEvent: 'Eliminar Evento',
+    confirmDeleteEvent: '¿Está seguro de que desea eliminar este evento? Esta acción no se puede deshacer.',
 
     heroTag: 'PANEL PRINCIPAL DEL EVENTO',
     heroTitle: 'Visión General del Grupo',
@@ -756,6 +774,12 @@ const TRANSLATIONS = {
     manageParticipants: 'Gestisci Partecipanti',
     viewParticipants: 'Vedi Partecipanti',
     privacyPrivateNotice: 'Visibilità riservata all\'organizzatore',
+    privacyPublicNotice: 'Risposte pubbliche per tutti',
+    editEvent: 'Modifica Evento',
+    editEventSubtitle: 'Aggiorna titolo, durata, luogo e descrizione dell\'evento',
+    btnSaveChanges: 'Salva Modifiche',
+    deleteEvent: 'Elimina Evento',
+    confirmDeleteEvent: 'Sei sicuro di voler eliminare questo evento? Questa azione non può essere annullata.',
 
     heroTag: 'PANNELLO PRINCIPALE EVENTO',
     heroTitle: 'Panoramica del Gruppo',
@@ -986,6 +1010,12 @@ const TRANSLATIONS = {
     manageParticipants: 'Gérer les Participants',
     viewParticipants: 'Voir les Participants',
     privacyPrivateNotice: 'Visibilité restreinte à l\'organisateur',
+    privacyPublicNotice: 'Réponses publiques pour tous',
+    editEvent: 'Modifier l’Événement',
+    editEventSubtitle: 'Mettez à jour le titre, la durée, le lieu et la description de l’événement',
+    btnSaveChanges: 'Enregistrer les Modifications',
+    deleteEvent: 'Supprimer l’Événement',
+    confirmDeleteEvent: 'Êtes-vous sûr de vouloir supprimer cet événement ? Cette action est irréversible.',
 
     heroTag: 'TABLEAU DE BORD PRINCIPAL',
     heroTitle: 'Vue d\'Ensemble du Groupe',
@@ -1219,10 +1249,12 @@ export function I18nProvider({ children }) {
 
   const t = (key, params = {}) => {
     const dict = TRANSLATIONS[lang] || TRANSLATIONS.pt;
-    let str = dict[key] || TRANSLATIONS.pt[key] || key;
+    let str = dict[key] || TRANSLATIONS.pt[key] || (params && params.defaultValue !== undefined ? params.defaultValue : key);
     if (typeof str === 'string' && Object.keys(params).length > 0) {
       Object.entries(params).forEach(([k, val]) => {
-        str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), val);
+        if (k !== 'defaultValue') {
+          str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), val);
+        }
       });
     }
     return str;

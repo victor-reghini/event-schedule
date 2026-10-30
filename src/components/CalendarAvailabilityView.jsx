@@ -1209,56 +1209,80 @@ export default function CalendarAvailabilityView({
                       )}
                     </div>
 
-                    {/* Ações de Voto */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {/* Ações de Voto e Ações do Organizador */}
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.75rem',
+                      paddingTop: '0.85rem',
+                      borderTop: '1px solid #f1f5f9'
+                    }}>
+                      {/* Linha de Sinalização do Participante */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '0.5rem'
+                      }}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>
                           Sua sinalização:
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => onVoteSuggestion(sug.id, 'available')}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 5,
-                            padding: '0.4rem 0.85rem',
-                            borderRadius: 'var(--radius-sm)',
-                            fontSize: '0.8rem',
-                            fontWeight: 700,
-                            border: `1px solid ${myVote === 'available' ? 'var(--color-available)' : 'var(--border-color)'}`,
-                            background: myVote === 'available' ? 'var(--color-available-bg)' : 'white',
-                            color: myVote === 'available' ? '#065f46' : 'var(--text-main)'
-                          }}
-                        >
-                          <ThumbsUp size={14} color={myVote === 'available' ? 'var(--color-available)' : '#64748b'} />
-                          Estou Disponível
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => onVoteSuggestion(sug.id, 'available')}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              padding: '0.4rem 0.75rem',
+                              borderRadius: 'var(--radius-sm)',
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              border: `1.5px solid ${myVote === 'available' ? 'var(--color-available)' : 'var(--border-color)'}`,
+                              background: myVote === 'available' ? 'var(--color-available-bg)' : 'white',
+                              color: myVote === 'available' ? '#065f46' : 'var(--text-main)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <ThumbsUp size={14} color={myVote === 'available' ? 'var(--color-available)' : '#64748b'} />
+                            <span>Estou Disponível</span>
+                          </button>
 
-                        <button
-                          type="button"
-                          onClick={() => onVoteSuggestion(sug.id, 'unavailable')}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 5,
-                            padding: '0.4rem 0.85rem',
-                            borderRadius: 'var(--radius-sm)',
-                            fontSize: '0.8rem',
-                            fontWeight: 700,
-                            border: `1px solid ${myVote === 'unavailable' ? 'var(--color-unavailable)' : 'var(--border-color)'}`,
-                            background: myVote === 'unavailable' ? 'var(--color-unavailable-bg)' : 'white',
-                            color: myVote === 'unavailable' ? '#991b1b' : 'var(--text-main)'
-                          }}
-                        >
-                          <ThumbsDown size={14} color={myVote === 'unavailable' ? 'var(--color-unavailable)' : '#64748b'} />
-                          Não Posso
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => onVoteSuggestion(sug.id, 'unavailable')}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              padding: '0.4rem 0.75rem',
+                              borderRadius: 'var(--radius-sm)',
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              border: `1.5px solid ${myVote === 'unavailable' ? 'var(--color-unavailable)' : 'var(--border-color)'}`,
+                              background: myVote === 'unavailable' ? 'var(--color-unavailable-bg)' : 'white',
+                              color: myVote === 'unavailable' ? '#991b1b' : 'var(--text-main)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <ThumbsDown size={14} color={myVote === 'unavailable' ? 'var(--color-unavailable)' : '#64748b'} />
+                            <span>Não Posso</span>
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Ações do Organizador */}
+                      {/* Ações do Organizador (Alinhamento Robusto em Linha Dedicada) */}
                       {isOrganizer && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          paddingTop: '0.65rem',
+                          borderTop: '1px dashed #e2e8f0',
+                          width: '100%'
+                        }}>
                           <button
                             type="button"
                             className="btn-primary"
@@ -1268,10 +1292,15 @@ export default function CalendarAvailabilityView({
                               endTime: sug.endTime,
                               durationMinutes: timeToMinutes(sug.endTime) - timeToMinutes(sug.startTime)
                             })}
-                            style={{ fontSize: '0.825rem', padding: '0.45rem 1rem' }}
+                            style={{
+                              flex: 1,
+                              justifyContent: 'center',
+                              fontSize: '0.825rem',
+                              padding: '0.5rem 0.85rem'
+                            }}
                           >
                             <Check size={15} />
-                            Definir como Horário Oficial
+                            <span>Definir como Horário Oficial</span>
                           </button>
 
                           {onRemoveTimeSuggestion && (
@@ -1284,7 +1313,7 @@ export default function CalendarAvailabilityView({
                               }}
                               style={{
                                 fontSize: '0.825rem',
-                                padding: '0.45rem 0.8rem',
+                                padding: '0.5rem 0.85rem',
                                 background: 'white',
                                 border: '1px solid #fecaca',
                                 borderRadius: 'var(--radius-sm)',
@@ -1292,8 +1321,10 @@ export default function CalendarAvailabilityView({
                                 fontWeight: 700,
                                 display: 'inline-flex',
                                 alignItems: 'center',
+                                justifyContent: 'center',
                                 gap: 5,
                                 cursor: 'pointer',
+                                flexShrink: 0,
                                 transition: 'all 0.15s ease'
                               }}
                               title={t('btnDeleteSuggestion') || 'Excluir sugestão de horário'}

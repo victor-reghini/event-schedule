@@ -12,7 +12,9 @@ import {
   XCircle,
   Filter,
   RotateCcw,
-  Flag
+  Flag,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import EventStatusBadge from './EventStatusBadge';
 import Avatar from './Avatar';
@@ -24,7 +26,9 @@ export default function MyEventsModal({
   currentEventId,
   onSelectEvent,
   onClose,
-  onUpdateEventStatus
+  onUpdateEventStatus,
+  onDeleteEvent,
+  onEditEvent
 }) {
   const { t } = useI18n();
 
@@ -168,16 +172,71 @@ export default function MyEventsModal({
 
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}
           >
-            <EventStatusBadge
-              status={eventStatus}
-              size="sm"
-              align="right"
-              isOrganizer={isOrg}
-              onStatusChange={onUpdateEventStatus ? (newStatus) => onUpdateEventStatus(newStatus, evt.id) : null}
-            />
-            <ArrowRight size={16} color={isSelected ? 'var(--primary)' : '#94a3b8'} style={{ marginTop: 4 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {isOrg && onEditEvent && (
+                <button
+                  type="button"
+                  onClick={() => onEditEvent(evt)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#64748b',
+                    padding: '0.25rem',
+                    borderRadius: 'var(--radius-sm)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title={t('editEvent')}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--primary)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = '#64748b'; }}
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
+
+              {isOrg && onDeleteEvent && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const msg = t('confirmDeleteEvent') || `Tem certeza que deseja excluir o evento "${evt.title}"?`;
+                    if (window.confirm(msg)) {
+                      onDeleteEvent(evt.id);
+                    }
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#94a3b8',
+                    padding: '0.25rem',
+                    borderRadius: 'var(--radius-sm)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title={t('deleteEvent')}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = '#94a3b8'; }}
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+
+              <EventStatusBadge
+                status={eventStatus}
+                size="sm"
+                align="right"
+                isOrganizer={isOrg}
+                onStatusChange={onUpdateEventStatus ? (newStatus) => onUpdateEventStatus(newStatus, evt.id) : null}
+              />
+            </div>
+            <ArrowRight size={16} color={isSelected ? 'var(--primary)' : '#94a3b8'} style={{ marginTop: 2 }} />
           </div>
         </div>
       </div>

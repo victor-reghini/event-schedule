@@ -488,3 +488,59 @@ export async function createDemoEventForUser(currentUser) {
 
   return eventId;
 }
+
+export async function deleteEventFromDb(eventId) {
+  // 1. Remover votos de sugestões de horários vinculadas ao evento
+  const { data: timeSugs } = await supabase
+    .from('time_suggestions')
+    .select('id')
+    .eq('event_id', eventId);
+
+  if (timeSugs && timeSugs.length > 0) {
+    const timeSugIds = timeSugs.map(s => s.id);
+    await supabase
+      .from('time_suggestion_votes')
+      .delete()
+      .in('suggestion_id', timeSugIds);
+
+    await supabase
+      .from('time_suggestions')
+      .delete()
+      .eq('event_id', eventId);
+  }
+
+  // 2. Remover votos de sugestões de locais vinculadas ao evento
+  const { data: locSugs } = await supabase
+    .from('location_suggestions')
+    .select('id')
+    .eq('event_id', eventId);
+
+  if (locSugs && locSugs.length > 0) {
+    const locSugIds = locSugs.map(l => l.id);
+    await supabase
+      .from('location_votes')
+      .delete()
+      .in('location_id', locSugIds);
+
+    await supabase
+      .from('location_suggestions')
+      .delete()
+      .eq('event_id', eventId);
+  }
+
+  // 3. Remover participantes vinculados ao evento
+  await supabase
+    .from('event_participants')
+    .delete()
+    .eq('event_id', eventId);
+
+  // 4. Remover o evento
+  const { error } = await supabase
+    .from('events')
+    .delete()
+    .eq('id', eventId);
+
+  if (error) {
+    throw new Error(`Erro ao excluir evento: ${error.message}`);
+  }
+}

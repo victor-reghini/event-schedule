@@ -18,7 +18,9 @@ import {
   XCircle,
   RotateCcw,
   ChevronDown,
-  Check
+  Check,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import Navbar from './components/Navbar';
 import SmartSuggestions from './components/SmartSuggestions';
@@ -26,6 +28,7 @@ import CalendarAvailabilityView from './components/CalendarAvailabilityView';
 import HeatmapView from './components/HeatmapView';
 import ConfirmedBanner from './components/ConfirmedBanner';
 import EventCreatorModal from './components/EventCreatorModal';
+import EditEventModal from './components/EditEventModal';
 import MyEventsModal from './components/MyEventsModal';
 import ShareModal from './components/ShareModal';
 import AuthModal from './components/AuthModal';
@@ -44,6 +47,7 @@ import {
   removeParticipantFromDb,
   saveAvailabilityInDb,
   updateEventFieldsInDb,
+  deleteEventFromDb,
   addTimeSuggestionInDb,
   voteTimeSuggestionInDb,
   removeTimeSuggestionInDb,
@@ -76,6 +80,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('heatmap'); // 'heatmap' (tela principal) | 'voting' | 'suggestions' | 'locations'
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditEventOpen, setIsEditEventOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
@@ -526,6 +531,69 @@ export default function App() {
       showToast('Novo evento criado com sucesso!');
     } catch (err) {
       showToast(err.message || 'Erro ao criar evento.');
+      refreshEvents({ silent: true });
+    }
+  };
+
+  // Organizador edita dados do evento (título, duração, local, descrição)
+  const handleSaveEventDetails = async (updatedFields) => {
+    if (!isOrganizer || !currentEvent) return;
+
+    const targetEventId = currentEvent.id;
+    setEvents(prevEvents =>
+      prevEvents.map(evt => {
+        if (evt.id !== targetEventId) return evt;
+        return {
+          ...evt,
+          title: updatedFields.title,
+          duration: updatedFields.duration,
+          locationType: updatedFields.locationType,
+          locationDetails: updatedFields.locationDetails,
+          description: updatedFields.description
+        };
+      })
+    );
+
+    try {
+      await updateEventFieldsInDb(targetEventId, {
+        title: updatedFields.title,
+        duration: updatedFields.duration,
+        location_type: updatedFields.locationType,
+        location_details: updatedFields.locationDetails,
+        description: updatedFields.description
+      });
+      showToast('Dados do evento atualizados com sucesso!');
+    } catch (err) {
+      showToast(err.message || 'Erro ao atualizar dados do evento.');
+      refreshEvents({ silent: true });
+    }
+  };
+
+  // Organizador exclui o evento
+  const handleDeleteEvent = async (eventIdToDelete) => {
+    const targetId = eventIdToDelete || currentEvent?.id;
+    if (!targetId) return;
+
+    const eventToDelete = events.find(e => e.id === targetId);
+    if (!eventToDelete) return;
+    if (eventToDelete.organizer?.id !== currentUser?.id) {
+      showToast('Apenas o organizador pode excluir este evento.');
+      return;
+    }
+
+    // Atualização otimista
+    const remainingEvents = events.filter(e => e.id !== targetId);
+    setEvents(remainingEvents);
+    if (currentEventId === targetId) {
+      setCurrentEventId(remainingEvents[0]?.id || '');
+    }
+    setIsEditEventOpen(false);
+
+    try {
+      await deleteEventFromDb(targetId);
+      showToast('Evento excluído com sucesso.');
+    } catch (err) {
+      showToast(err.message || 'Erro ao excluir evento no banco.');
       refreshEvents({ silent: true });
     }
   };
@@ -1076,7 +1144,36 @@ export default function App() {
               />
             </div>
 
-            <h1 className="event-title">{currentEvent.title}</h1>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.25rem' }}>
+              <h1 className="event-title" style={{ margin: 0, flex: 1 }}>{currentEvent.title}</h1>
+              {isOrganizer && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditEventOpen(true)}
+                  style={{
+                    background: '#f8fafc',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.35rem 0.65rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    color: 'var(--text-main)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    transition: 'all 0.15s ease',
+                    flexShrink: 0
+                  }}
+                  title={t('editEvent')}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = '#f8fafc'; }}
+                >
+                  <Pencil size={13} color="var(--primary)" />
+                  <span>{t('editEvent')}</span>
+                </button>
+              )}
+            </div>
 
             {/* Metadados: Duração, Local e Período Sugerido */}
             <div className="meta-item">
@@ -1500,6 +1597,15 @@ export default function App() {
         />
       )}
 
+      {isEditEventOpen && currentEvent && isOrganizer && (
+        <EditEventModal
+          event={currentEvent}
+          onSave={handleSaveEventDetails}
+          onDelete={handleDeleteEvent}
+          onClose={() => setIsEditEventOpen(false)}
+        />
+      )}
+
       {isHistoryOpen && (
         <MyEventsModal
           events={events}
@@ -1508,6 +1614,12 @@ export default function App() {
           onSelectEvent={(id) => setCurrentEventId(id)}
           onClose={() => setIsHistoryOpen(false)}
           onUpdateEventStatus={handleUpdateEventStatus}
+          onDeleteEvent={handleDeleteEvent}
+          onEditEvent={(evt) => {
+            setCurrentEventId(evt.id);
+            setIsEditEventOpen(true);
+            setIsHistoryOpen(false);
+          }}
         />
       )}
 
