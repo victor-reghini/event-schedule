@@ -1231,9 +1231,6 @@ export default function App() {
                 onSelectOfficialLocation={handleSelectOfficialLocation}
                 onToggleAllowLocationSuggestions={handleToggleLocationSuggestions}
                 onOpenAuth={() => setIsAuthOpen(true)}
-                onNavigateTab={(tab) => setActiveTab(tab)}
-                onOpenParticipants={() => setIsParticipantsOpen(true)}
-                onUpdateStatus={handleUpdateEventStatus}
               />
             )}
 

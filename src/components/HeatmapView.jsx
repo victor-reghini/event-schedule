@@ -13,7 +13,6 @@ import {
   Check,
   X,
   Calendar,
-  CalendarCheck2,
   ExternalLink,
   Star,
   CheckCircle2,
@@ -22,7 +21,6 @@ import {
 import { calculateHeatmap, timeToMinutes } from '../services/schedulerAlgorithm';
 import { useI18n } from '../services/i18n';
 import Avatar from './Avatar';
-import EventStatusBadge from './EventStatusBadge';
 
 export default function HeatmapView({
   event,
@@ -35,10 +33,7 @@ export default function HeatmapView({
   onVoteLocation,
   onSelectOfficialLocation,
   onToggleAllowLocationSuggestions,
-  onOpenAuth,
-  onNavigateTab,
-  onOpenParticipants,
-  onUpdateStatus
+  onOpenAuth
 }) {
   const { t, lang } = useI18n();
   const [selectedDate, setSelectedDate] = useState(event.dates[0] || '');
@@ -200,139 +195,7 @@ export default function HeatmapView({
 
   return (
     <div className="heatmap-view-section" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', minWidth: 0, width: '100%', boxSizing: 'border-box' }}>
-      {/* 1. HERO / DASHBOARD DE RESUMO DO EVENTO */}
-      <div style={{
-        background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)',
-        border: '1px solid #bbf7d0',
-        borderRadius: 'var(--radius-lg)',
-        padding: '1.5rem',
-        boxShadow: 'var(--shadow-sm)',
-        width: '100%',
-        boxSizing: 'border-box'
-      }}>
-        {/* Top Header: Título no canto esquerdo e Badge de Status no canto oposto */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '0.75rem',
-          marginBottom: '0.35rem'
-        }}>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-            <Users size={24} color="var(--primary)" />
-            {t('heroTitle')}
-          </h2>
-
-          <div style={{ flexShrink: 0 }}>
-            <EventStatusBadge
-              status={event.status || 'voting'}
-              size="md"
-              align="right"
-              isOrganizer={isOrganizer}
-              onStatusChange={onUpdateStatus}
-            />
-          </div>
-        </div>
-
-        <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '1.15rem' }}>
-          {t('heroSubtitle')}
-        </p>
-
-        {/* Botões de Ação */}
-        <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          {onNavigateTab && (
-            <button
-              className="btn-primary"
-              onClick={() => onNavigateTab('voting')}
-              style={{ padding: '0.55rem 1rem', fontSize: '0.85rem' }}
-            >
-              <CalendarCheck2 size={16} />
-              {t('tabMyAvailability')}
-            </button>
-          )}
-          <button
-            className="btn-secondary"
-            onClick={() => setIsTimeSugModalOpen(true)}
-            style={{ padding: '0.55rem 1rem', fontSize: '0.85rem' }}
-          >
-            <Clock size={16} />
-            {t('suggestTimeBtn')}
-          </button>
-          {allowLocationSuggestions && (
-            <button
-              className="btn-secondary"
-              onClick={() => setIsLocModalOpen(true)}
-              style={{ padding: '0.55rem 1rem', fontSize: '0.85rem' }}
-            >
-              <MapPin size={16} />
-              {t('btnSuggestLocation')}
-            </button>
-          )}
-        </div>
-
-        {/* Métricas Rápidas */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
-          gap: '0.85rem',
-          width: '100%',
-          boxSizing: 'border-box'
-        }}>
-          <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.85rem 1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                {t('metricParticipants')}
-              </div>
-              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-main)', marginTop: 2 }}>
-                {event.participants.length} {t('metricParticipantsSub')}
-              </div>
-            </div>
-            {onOpenParticipants && (
-              <button
-                type="button"
-                onClick={onOpenParticipants}
-                style={{
-                  marginTop: '0.5rem',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  color: 'var(--primary)',
-                  background: 'transparent',
-                  border: 'none',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  padding: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4
-                }}
-              >
-                {isOrganizer ? `${t('manageParticipants')} →` : `${t('viewParticipants')} →`}
-              </button>
-            )}
-          </div>
-
-          <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.85rem 1rem' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-              {t('metricTimeSuggestions')}
-            </div>
-            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary)', marginTop: 2 }}>
-              {customSuggestions.length} {t('metricTimeSuggestionsSub')}
-            </div>
-          </div>
-
-          <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.85rem 1rem' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-              {t('metricLocations')}
-            </div>
-            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#059669', marginTop: 2 }}>
-              {locationSuggestions.length} {t('metricLocationsSub')}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. SUGESTÕES DE DIAS & HORÁRIOS DOS PARTICIPANTES */}
+      {/* SUGESTÕES DE DIAS & HORÁRIOS DOS PARTICIPANTES */}
       <div style={{
         background: 'white',
         border: '1px solid var(--border-color)',
