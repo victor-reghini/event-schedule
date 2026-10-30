@@ -13,4 +13,7 @@ CLAUDE.md
 node_modules/
 dist/
 dist-ssr/
+.env
+.env.*
+!.env.example
 *.local

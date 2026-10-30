@@ -1,385 +1,456 @@
-/**
- * Gerenciamento de Estado Local e Persistência
- */
+import { supabase } from './supabaseClient';
 
-// Gera datas dinâmicas no futuro próximo para a demonstração
-function getUpcomingDates() {
-  const dates = [];
+const EVENT_RELATIONAL_SELECT = `
+  *,
+  organizer:profiles!events_organizer_id_fkey(id, name, email, avatar_url),
+  event_participants(
+    user_id,
+    availabilities,
+    custom_intervals,
+    suggestions,
+    joined_at,
+    updated_at,
+    profile:profiles!event_participants_user_id_fkey(id, name, email, avatar_url)
+  ),
+  location_suggestions(
+    id,
+    title,
+    address,
+    notes,
+    created_at,
+    creator:profiles!location_suggestions_creator_id_fkey(id, name, email, avatar_url),
+    location_votes(user_id, vote)
+  ),
+  time_suggestions(
+    id,
+    date,
+    start_time,
+    end_time,
+    title,
+    created_at,
+    creator:profiles!time_suggestions_creator_id_fkey(id, name, email, avatar_url),
+    time_suggestion_votes(user_id, vote)
+  )
+`;
+
+function mapEventRowToClient(row) {
+  const rawTimeRange = row.time_range || { start: '09:00', end: '18:00', step: 60 };
+  const {
+    start = '09:00',
+    end = '18:00',
+    step = 60,
+    dateMode = 'specific',
+    dateRange = null,
+    suggestedTimeWindow = null
+  } = rawTimeRange;
+
+  const baseDates = Array.isArray(row.dates) ? row.dates : [];
+
+  const participants = (row.event_participants || []).map(p => ({
+    id: p.user_id,
+    name: p.profile?.name || 'Participante',
+    email: p.profile?.email || '',
+    avatar: p.profile?.avatar_url || '',
+    availabilities: p.availabilities || {},
+    customIntervals: Array.isArray(p.custom_intervals) ? p.custom_intervals : [],
+    suggestions: Array.isArray(p.suggestions) ? p.suggestions : [],
+    joinedAt: p.joined_at,
+    updatedAt: p.updated_at
+  }));
+
+  const extraDatesSet = new Set();
+  participants.forEach(p => {
+    (p.customIntervals || []).forEach(interval => {
+      if (interval?.dateStr && !baseDates.includes(interval.dateStr)) {
+        extraDatesSet.add(interval.dateStr);
+      }
+    });
+  });
+
+  const locationSuggestions = [...(row.location_suggestions || [])]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .map(loc => ({
+      id: loc.id,
+      title: loc.title,
+      address: loc.address || '',
+      notes: loc.notes || '',
+      createdAt: loc.created_at,
+      creator: {
+        id: loc.creator?.id || '',
+        name: loc.creator?.name || 'Participante',
+        avatar: loc.creator?.avatar_url || ''
+      },
+      votes: Object.fromEntries((loc.location_votes || []).map(v => [v.user_id, v.vote]))
+    }));
+
+  const customSuggestions = [...(row.time_suggestions || [])]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .map(sug => ({
+      id: sug.id,
+      date: sug.date,
+      startTime: sug.start_time,
+      endTime: sug.end_time,
+      title: sug.title || 'Sugestão de Horário',
+      createdAt: sug.created_at,
+      creator: {
+        id: sug.creator?.id || '',
+        name: sug.creator?.name || 'Participante',
+        avatar: sug.creator?.avatar_url || ''
+      },
+      votes: Object.fromEntries((sug.time_suggestion_votes || []).map(v => [v.user_id, v.vote]))
+    }));
+
+  return {
+    id: row.id,
+    title: row.title,
+    type: row.type || 'encontro',
+    emoji: row.emoji || '📅',
+    description: row.description || '',
+    organizer: {
+      id: row.organizer?.id || row.organizer_id,
+      name: row.organizer?.name || 'Organizador',
+      email: row.organizer?.email || '',
+      avatar: row.organizer?.avatar_url || ''
+    },
+    locationType: row.location_type || 'presencial',
+    locationDetails: row.location_details || '',
+    allowLocationSuggestions: Boolean(row.allow_location_suggestions),
+    locationSuggestions,
+    customSuggestions,
+    duration: Number(row.duration) || 60,
+    dates: baseDates,
+    extraDates: Array.from(extraDatesSet),
+    dateMode,
+    dateRange,
+    suggestedTimeWindow,
+    timeRange: { start, end, step },
+    privacy: row.privacy || 'public',
+    status: row.status || 'voting',
+    confirmedSlot: row.confirmed_slot || null,
+    participants,
+    createdAt: row.created_at
+  };
+}
+
+export async function fetchEvents() {
+  const { data, error } = await supabase
+    .from('events')
+    .select(EVENT_RELATIONAL_SELECT)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new Error(`Erro ao carregar eventos do Supabase: ${error.message}`);
+  }
+
+  return (data || []).map(mapEventRowToClient);
+}
+
+export function subscribeToEventsRealtime(onSyncNeeded) {
+  let debounceTimer = null;
+
+  const channel = supabase
+    .channel('sincroniza-realtime-sync')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public' },
+      () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          onSyncNeeded();
+        }, 250);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    supabase.removeChannel(channel);
+  };
+}
+
+export async function createEventInDb(newEvent, organizerId) {
+  const packedTimeRange = {
+    ...(newEvent.timeRange || { start: '08:00', end: '23:00', step: 60 }),
+    dateMode: newEvent.dateMode || 'specific',
+    dateRange: newEvent.dateRange || null,
+    suggestedTimeWindow: newEvent.suggestedTimeWindow || null
+  };
+
+  const { data: insertedEvent, error: eventErr } = await supabase
+    .from('events')
+    .insert({
+      id: newEvent.id,
+      title: newEvent.title,
+      type: newEvent.type || 'encontro',
+      emoji: newEvent.emoji || '📅',
+      description: newEvent.description || '',
+      organizer_id: organizerId,
+      location_type: newEvent.locationType || 'presencial',
+      location_details: newEvent.locationDetails || '',
+      duration: Number(newEvent.duration) || 60,
+      dates: newEvent.dates || [],
+      time_range: packedTimeRange,
+      privacy: newEvent.privacy || 'public',
+      status: newEvent.status || 'voting',
+      confirmed_slot: newEvent.confirmedSlot || null,
+      allow_location_suggestions: newEvent.allowLocationSuggestions ?? true
+    })
+    .select('id')
+    .single();
+
+  if (eventErr) {
+    throw new Error(`Erro ao criar evento: ${eventErr.message}`);
+  }
+
+  const { error: partErr } = await supabase
+    .from('event_participants')
+    .upsert(
+      {
+        event_id: insertedEvent.id,
+        user_id: organizerId,
+        availabilities: {},
+        custom_intervals: [],
+        suggestions: []
+      },
+      { onConflict: 'event_id,user_id' }
+    );
+
+  if (partErr) {
+    throw new Error(`Erro ao registrar organizador no evento: ${partErr.message}`);
+  }
+
+  return insertedEvent.id;
+}
+
+export async function joinEventInDb(eventId, userId) {
+  const { error } = await supabase
+    .from('event_participants')
+    .upsert(
+      {
+        event_id: eventId,
+        user_id: userId
+      },
+      { onConflict: 'event_id,user_id', ignoreDuplicates: true }
+    );
+
+  if (error) {
+    throw new Error(`Erro ao ingressar no evento: ${error.message}`);
+  }
+}
+
+export async function removeParticipantFromDb(eventId, participantId) {
+  const { error } = await supabase
+    .from('event_participants')
+    .delete()
+    .eq('event_id', eventId)
+    .eq('user_id', participantId);
+
+  if (error) {
+    throw new Error(`Erro ao remover participante: ${error.message}`);
+  }
+}
+
+export async function saveAvailabilityInDb(eventId, participantData) {
+  const { error } = await supabase
+    .from('event_participants')
+    .upsert(
+      {
+        event_id: eventId,
+        user_id: participantData.userId,
+        availabilities: participantData.availabilities || {},
+        custom_intervals: participantData.customIntervals || [],
+        suggestions: participantData.suggestions || [],
+        updated_at: new Date().toISOString()
+      },
+      { onConflict: 'event_id,user_id' }
+    );
+
+  if (error) {
+    throw new Error(`Erro ao salvar disponibilidade: ${error.message}`);
+  }
+}
+
+export async function updateEventFieldsInDb(eventId, fields) {
+  const { error } = await supabase
+    .from('events')
+    .update({
+      ...fields,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', eventId);
+
+  if (error) {
+    throw new Error(`Erro ao atualizar evento: ${error.message}`);
+  }
+}
+
+export async function addTimeSuggestionInDb(eventId, suggestionObj, creatorId) {
+  const { data, error } = await supabase
+    .from('time_suggestions')
+    .insert({
+      id: suggestionObj.id,
+      event_id: eventId,
+      creator_id: creatorId,
+      date: suggestionObj.date,
+      start_time: suggestionObj.startTime,
+      end_time: suggestionObj.endTime,
+      title: suggestionObj.title || 'Sugestão de Horário'
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    throw new Error(`Erro ao criar sugestão de horário: ${error.message}`);
+  }
+
+  await supabase
+    .from('time_suggestion_votes')
+    .upsert(
+      {
+        suggestion_id: data.id,
+        user_id: creatorId,
+        vote: 'available'
+      },
+      { onConflict: 'suggestion_id,user_id' }
+    );
+}
+
+export async function voteTimeSuggestionInDb(suggestionId, userId, voteType) {
+  const { error } = await supabase
+    .from('time_suggestion_votes')
+    .upsert(
+      {
+        suggestion_id: suggestionId,
+        user_id: userId,
+        vote: voteType
+      },
+      { onConflict: 'suggestion_id,user_id' }
+    );
+
+  if (error) {
+    throw new Error(`Erro ao votar no horário: ${error.message}`);
+  }
+}
+
+export async function addLocationSuggestionInDb(eventId, locationObj, creatorId) {
+  const { data, error } = await supabase
+    .from('location_suggestions')
+    .insert({
+      id: locationObj.id,
+      event_id: eventId,
+      creator_id: creatorId,
+      title: locationObj.title,
+      address: locationObj.address || '',
+      notes: locationObj.notes || ''
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    throw new Error(`Erro ao sugerir local: ${error.message}`);
+  }
+
+  await supabase
+    .from('location_votes')
+    .upsert(
+      {
+        location_id: data.id,
+        user_id: creatorId,
+        vote: 'approve'
+      },
+      { onConflict: 'location_id,user_id' }
+    );
+}
+
+export async function voteLocationInDb(locationId, userId, voteType, removeVote = false) {
+  if (removeVote) {
+    const { error } = await supabase
+      .from('location_votes')
+      .delete()
+      .eq('location_id', locationId)
+      .eq('user_id', userId);
+
+    if (error) {
+      throw new Error(`Erro ao remover voto do local: ${error.message}`);
+    }
+    return;
+  }
+
+  const { error } = await supabase
+    .from('location_votes')
+    .upsert(
+      {
+        location_id: locationId,
+        user_id: userId,
+        vote: voteType
+      },
+      { onConflict: 'location_id,user_id' }
+    );
+
+  if (error) {
+    throw new Error(`Erro ao votar no local: ${error.message}`);
+  }
+}
+
+export async function createDemoEventForUser(currentUser) {
   const today = new Date();
-  // Busca a próxima sexta, sábado e domingo
-  for (let i = 2; i <= 6; i++) {
+  const upcomingDates = [2, 3, 4].map(offset => {
     const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    dates.push(d.toISOString().split('T')[0]);
-  }
-  return dates.slice(0, 3); // 3 dias candidatos
-}
+    d.setDate(today.getDate() + offset);
+    return d.toISOString().split('T')[0];
+  });
 
-const DEMO_DATES = getUpcomingDates();
+  const eventId = `evt-demo-${Date.now()}`;
 
-export const INITIAL_USER = {
-  id: 'usr-victor',
-  name: 'Victor Reghini',
-  email: 'victor@exemplo.com',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  isOrganizer: true
-};
-
-export const DEMO_PARTICIPANTS = [
-  {
-    id: 'usr-victor',
-    name: 'Victor Reghini',
-    email: 'victor@exemplo.com',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    availabilities: {}, // Será preenchido
-    suggestions: ['Sábado à tarde seria o ideal pra mim!']
-  },
-  {
-    id: 'usr-camila',
-    name: 'Camila Santos',
-    email: 'camila@exemplo.com',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-    availabilities: {},
-    suggestions: ['Qualquer horário no fim de semana']
-  },
-  {
-    id: 'usr-rodrigo',
-    name: 'Rodrigo Lima',
-    email: 'rodrigo@exemplo.com',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    availabilities: {},
-    suggestions: ['Consigo ficar até 18h no sábado']
-  },
-  {
-    id: 'usr-mariana',
-    name: 'Mariana Duarte',
-    email: 'mariana@exemplo.com',
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
-    availabilities: {},
-    suggestions: ['Prefiro sábado à tarde']
-  },
-  {
-    id: 'usr-lucas',
-    name: 'Lucas Almeida',
-    email: 'lucas@exemplo.com',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-    availabilities: {},
-    suggestions: []
-  }
-];
-
-// Preenche dados realistas de disponibilidade para a demonstração
-function buildDemoAvailabilities(dates) {
-  const [d1, d2, d3] = dates; // sexta, sabado, domingo
-  const times = [
-    '10:00', '11:00', '12:00', '13:00', '14:00', '15:00',
-    '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'
-  ];
-
-  // Victor: Livre sexta à noite, sábado a tarde toda, domingo tarde
-  DEMO_PARTICIPANTS[0].availabilities = {
-    [`${d1}_19:00`]: 'available', [`${d1}_20:00`]: 'available', [`${d1}_21:00`]: 'available',
-    [`${d2}_14:00`]: 'available', [`${d2}_15:00`]: 'available', [`${d2}_16:00`]: 'available',
-    [`${d2}_17:00`]: 'available', [`${d2}_18:00`]: 'available', [`${d2}_19:00`]: 'available',
-    [`${d3}_15:00`]: 'available', [`${d3}_16:00`]: 'available'
-  };
-  DEMO_PARTICIPANTS[0].customIntervals = [
-    { id: 'v-int-1', dateStr: d1, startTime: '19:00', endTime: '22:00', status: 'available' },
-    { id: 'v-int-2', dateStr: d2, startTime: '14:00', endTime: '20:00', status: 'available' },
-    { id: 'v-int-3', dateStr: d3, startTime: '15:00', endTime: '17:00', status: 'available' }
-  ];
-
-  // Camila: Livre quase todo o sábado
-  DEMO_PARTICIPANTS[1].availabilities = {
-    [`${d1}_20:00`]: 'available',
-    [`${d2}_12:00`]: 'available', [`${d2}_13:00`]: 'available', [`${d2}_14:00`]: 'available',
-    [`${d2}_15:00`]: 'available', [`${d2}_16:00`]: 'available', [`${d2}_17:00`]: 'available',
-    [`${d2}_18:00`]: 'available',
-    [`${d3}_14:00`]: 'available', [`${d3}_15:00`]: 'available'
-  };
-  DEMO_PARTICIPANTS[1].customIntervals = [
-    { id: 'c-int-1', dateStr: d1, startTime: '20:00', endTime: '21:00', status: 'available' },
-    { id: 'c-int-2', dateStr: d2, startTime: '12:00', endTime: '19:00', status: 'available' },
-    { id: 'c-int-3', dateStr: d3, startTime: '14:00', endTime: '16:00', status: 'available' }
-  ];
-
-  // Rodrigo: Livre sábado das 14h às 18h, ocupado das 18h às 19h
-  DEMO_PARTICIPANTS[2].availabilities = {
-    [`${d2}_14:00`]: 'available', [`${d2}_15:00`]: 'available', [`${d2}_16:00`]: 'available',
-    [`${d2}_17:00`]: 'available', [`${d2}_18:00`]: 'unavailable',
-    [`${d3}_16:00`]: 'available', [`${d3}_17:00`]: 'available'
-  };
-  DEMO_PARTICIPANTS[2].customIntervals = [
-    { id: 'r-int-1', dateStr: d2, startTime: '14:00', endTime: '18:00', status: 'available' },
-    { id: 'r-int-2', dateStr: d2, startTime: '18:00', endTime: '19:00', status: 'unavailable' },
-    { id: 'r-int-3', dateStr: d3, startTime: '16:00', endTime: '18:00', status: 'available' }
-  ];
-
-  // Mariana: Livre sábado à tarde
-  DEMO_PARTICIPANTS[3].availabilities = {
-    [`${d2}_14:00`]: 'available', [`${d2}_15:00`]: 'available', [`${d2}_16:00`]: 'available',
-    [`${d2}_17:00`]: 'available', [`${d2}_18:00`]: 'available',
-    [`${d3}_15:00`]: 'available', [`${d3}_16:00`]: 'available'
-  };
-  DEMO_PARTICIPANTS[3].customIntervals = [
-    { id: 'm-int-1', dateStr: d2, startTime: '14:00', endTime: '19:00', status: 'available' },
-    { id: 'm-int-2', dateStr: d3, startTime: '15:00', endTime: '17:00', status: 'available' }
-  ];
-
-  // Lucas: Disponível sábado à tarde e domingo
-  DEMO_PARTICIPANTS[4].availabilities = {
-    [`${d2}_15:00`]: 'available', [`${d2}_16:00`]: 'available', [`${d2}_17:00`]: 'available',
-    [`${d2}_18:00`]: 'available',
-    [`${d3}_14:00`]: 'available', [`${d3}_15:00`]: 'available', [`${d3}_16:00`]: 'available'
-  };
-  DEMO_PARTICIPANTS[4].customIntervals = [
-    { id: 'l-int-1', dateStr: d2, startTime: '15:00', endTime: '19:00', status: 'available' },
-    { id: 'l-int-2', dateStr: d3, startTime: '14:00', endTime: '17:00', status: 'available' }
-  ];
-}
-
-buildDemoAvailabilities(DEMO_DATES);
-
-export const SEED_EVENTS = [
-  {
-    id: 'evt-reencontro-2026',
-    title: 'Reencontro de Amigos da Turma',
-    type: 'reencontro',
-    emoji: '🎉',
-    description: 'Bora matar a saudade e colocar os assuntos em dia! Vamos escolher o melhor horário para todo mundo comparecer.',
-    organizer: {
-      id: 'usr-victor',
-      name: 'Victor Reghini',
-      email: 'victor@exemplo.com',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
+  await createEventInDb(
+    {
+      id: eventId,
+      title: 'Reencontro de Amigos da Turma',
+      type: 'reencontro',
+      emoji: '🎉',
+      description: 'Vamos escolher o melhor horário e local para todo mundo comparecer!',
+      locationType: 'presencial',
+      locationDetails: 'Vila Madalena - São Paulo (ou local a combinar)',
+      duration: 180,
+      dates: upcomingDates,
+      timeRange: { start: '12:00', end: '22:00', step: 60 },
+      privacy: 'public',
+      status: 'voting',
+      allowLocationSuggestions: true
     },
-    locationType: 'presencial',
-    locationDetails: 'Vila Madalena - São Paulo (ou local a combinar)',
-    duration: 180, // 3 horas
-    dates: DEMO_DATES,
-    timeRange: { start: '12:00', end: '22:00', step: 60 },
-    privacy: 'public', // 'public' (todos veem tudo) ou 'private' (só organizador)
-    status: 'voting', // 'voting' ou 'confirmed'
-    confirmedSlot: null,
-    allowLocationSuggestions: true,
-    locationSuggestions: [
+    currentUser.id
+  );
+
+  await saveAvailabilityInDb(eventId, {
+    userId: currentUser.id,
+    availabilities: {
+      [`${upcomingDates[1]}_14:00`]: 'available',
+      [`${upcomingDates[1]}_15:00`]: 'available',
+      [`${upcomingDates[1]}_16:00`]: 'available',
+      [`${upcomingDates[1]}_17:00`]: 'available'
+    },
+    customIntervals: [
       {
-        id: 'loc-1',
-        title: 'Bar & Restaurante Pirajá (Pinheiros)',
-        address: 'Rua Fradique Coutinho, 124 - Pinheiros',
-        notes: 'Clima descontraído, ótimos petiscos e mesas grandes.',
-        creator: {
-          id: 'usr-camila',
-          name: 'Camila Santos',
-          avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80'
-        },
-        createdAt: new Date().toISOString(),
-        votes: {
-          'usr-camila': 'approve',
-          'usr-victor': 'approve',
-          'usr-mariana': 'approve',
-          'usr-rodrigo': 'reject'
-        }
-      },
-      {
-        id: 'loc-2',
-        title: 'Parque Villa-Lobos (Área de Piquenique)',
-        address: 'Av. Prof. Fonseca Rodrigues, 2001 - Alto de Pinheiros',
-        notes: 'Espaço aberto ao ar livre, bom para levar comidas e bebidas.',
-        creator: {
-          id: 'usr-lucas',
-          name: 'Lucas Almeida',
-          avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'
-        },
-        createdAt: new Date().toISOString(),
-        votes: {
-          'usr-lucas': 'approve',
-          'usr-victor': 'approve',
-          'usr-camila': 'reject'
-        }
+        id: `int-${Date.now()}`,
+        dateStr: upcomingDates[1],
+        startTime: '14:00',
+        endTime: '18:00',
+        status: 'available'
       }
     ],
-    customSuggestions: [
-      {
-        id: 'sug-1',
-        date: DEMO_DATES[1],
-        startTime: '15:30',
-        endTime: '18:30',
-        title: 'Sábado à tarde após o almoço',
-        creator: {
-          id: 'usr-camila',
-          name: 'Camila Santos',
-          avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80'
-        },
-        createdAt: new Date().toISOString(),
-        votes: {
-          'usr-camila': 'available',
-          'usr-victor': 'available',
-          'usr-mariana': 'available',
-          'usr-rodrigo': 'unavailable'
-        }
-      },
-      {
-        id: 'sug-2',
-        date: DEMO_DATES[2],
-        startTime: '16:00',
-        endTime: '19:00',
-        title: 'Final de tarde no Domingo',
-        creator: {
-          id: 'usr-lucas',
-          name: 'Lucas Almeida',
-          avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'
-        },
-        createdAt: new Date().toISOString(),
-        votes: {
-          'usr-lucas': 'available',
-          'usr-victor': 'available'
-        }
-      }
-    ],
-    participants: DEMO_PARTICIPANTS,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'evt-reuniao-presencial',
-    title: 'Planejamento Estratégico Q4',
-    type: 'reuniao-presencial',
-    emoji: '💼',
-    description: 'Reunião executiva para alinhamento de metas e prioridades.',
-    organizer: {
-      id: 'usr-victor',
-      name: 'Victor Reghini',
-      email: 'victor@exemplo.com',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
-    },
-    locationType: 'presencial',
-    locationDetails: 'Sala Principal - Av. Paulista, 1000',
-    duration: 120, // 2 horas
-    dates: [DEMO_DATES[0], DEMO_DATES[1]],
-    timeRange: { start: '09:00', end: '18:00', step: 60 },
-    privacy: 'private', // Visibilidade restrita ao organizador
-    status: 'confirmed',
-    confirmedSlot: {
-      date: DEMO_DATES[0],
-      startTime: '14:00',
-      endTime: '16:00',
-      durationMinutes: 120
-    },
-    allowLocationSuggestions: false,
-    locationSuggestions: [],
-    customSuggestions: [],
-    participants: [DEMO_PARTICIPANTS[0], DEMO_PARTICIPANTS[1], DEMO_PARTICIPANTS[2]],
-    createdAt: new Date(Date.now() - 86400000).toISOString()
-  },
-  {
-    id: 'evt-almoco-equipe',
-    title: 'Almoço de Fim de Ano da Equipe',
-    type: 'encontro',
-    emoji: '🍽️',
-    description: 'Confraternização anual do time no restaurante.',
-    organizer: {
-      id: 'usr-victor',
-      name: 'Victor Reghini',
-      email: 'victor@exemplo.com',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
-    },
-    locationType: 'presencial',
-    locationDetails: 'Fogo de Chão - Jardins',
-    duration: 120,
-    dates: [DEMO_DATES[0]],
-    timeRange: { start: '12:00', end: '16:00', step: 60 },
-    privacy: 'public',
-    status: 'completed',
-    confirmedSlot: {
-      date: DEMO_DATES[0],
-      startTime: '12:30',
-      endTime: '14:30',
-      durationMinutes: 120
-    },
-    allowLocationSuggestions: false,
-    locationSuggestions: [],
-    customSuggestions: [],
-    participants: [DEMO_PARTICIPANTS[0], DEMO_PARTICIPANTS[1], DEMO_PARTICIPANTS[3]],
-    createdAt: new Date(Date.now() - 172800000).toISOString()
-  },
-  {
-    id: 'evt-workshop-design',
-    title: 'Workshop de Design Thinking Presencial',
-    type: 'reuniao-presencial',
-    emoji: '🎨',
-    description: 'Sessão prática cancelada por indisponibilidade da sala.',
-    organizer: {
-      id: 'usr-victor',
-      name: 'Victor Reghini',
-      email: 'victor@exemplo.com',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
-    },
-    locationType: 'presencial',
-    locationDetails: 'Coworking Paulista - Sala 4',
-    duration: 180,
-    dates: [DEMO_DATES[1]],
-    timeRange: { start: '14:00', end: '18:00', step: 60 },
-    privacy: 'public',
-    status: 'canceled',
-    confirmedSlot: null,
-    allowLocationSuggestions: false,
-    locationSuggestions: [],
-    customSuggestions: [],
-    participants: [DEMO_PARTICIPANTS[0], DEMO_PARTICIPANTS[2]],
-    createdAt: new Date(Date.now() - 259200000).toISOString()
-  }
-];
+    suggestions: ['Sábado à tarde seria ideal!']
+  });
 
-const STORAGE_KEYS = {
-  EVENTS: 'sincroniza_events_v7',
-  CURRENT_USER: 'sincroniza_user_v2'
-};
+  await addLocationSuggestionInDb(
+    eventId,
+    {
+      id: `loc-${Date.now()}`,
+      title: 'Bar & Restaurante Pirajá (Pinheiros)',
+      address: 'Rua Fradique Coutinho, 124 - Pinheiros',
+      notes: 'Ótimos petiscos e mesas grandes para grupos.'
+    },
+    currentUser.id
+  );
 
-export function getStoredEvents() {
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.EVENTS);
-    if (data) {
-      const parsed = JSON.parse(data);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map(e => ({
-          ...e,
-          status: e.status || 'voting'
-        }));
-      }
-    }
-  } catch (e) {
-    console.error('Erro ao ler eventos:', e);
-  }
-  // Se não existir, salva os dados de seed
-  saveStoredEvents(SEED_EVENTS);
-  return SEED_EVENTS;
-}
-
-export function saveStoredEvents(events) {
-  try {
-    localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events));
-  } catch (e) {
-    console.error('Erro ao salvar eventos:', e);
-  }
-}
-
-export function getStoredUser() {
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-    if (data) {
-      return JSON.parse(data);
-    }
-  } catch (e) {
-    console.error('Erro ao ler usuário:', e);
-  }
-  saveStoredUser(INITIAL_USER);
-  return INITIAL_USER;
-}
-
-export function saveStoredUser(user) {
-  try {
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
-  } catch (e) {
-    console.error('Erro ao salvar usuário:', e);
-  }
+  return eventId;
 }

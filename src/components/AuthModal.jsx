@@ -12,11 +12,13 @@ export default function AuthModal({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [infoMessage, setInfoMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setInfoMessage('');
     setLoading(true);
 
     try {
@@ -31,6 +33,13 @@ export default function AuthModal({
           throw new Error('A senha deve ter pelo menos 6 caracteres.');
         }
         const session = await registerUser(name, email, password);
+        if (session?.requiresEmailConfirmation) {
+          setTab('login');
+          setInfoMessage(
+            `Conta criada para ${session.email}. Confirme o link enviado por e-mail antes de entrar.`
+          );
+          return;
+        }
         onAuthSuccess(session);
       }
     } catch (err) {
@@ -114,6 +123,24 @@ export default function AuthModal({
             Cadastrar
           </button>
         </div>
+
+        {infoMessage && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            color: '#1d4ed8',
+            padding: '0.65rem 0.85rem',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.85rem',
+            marginBottom: '1rem'
+          }}>
+            <Info size={16} />
+            <span>{infoMessage}</span>
+          </div>
+        )}
 
         {error && (
           <div style={{

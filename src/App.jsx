@@ -33,11 +33,22 @@ import Avatar from './components/Avatar';
 import ProfileAvatarModal from './components/ProfileAvatarModal';
 import EventStatusBadge from './components/EventStatusBadge';
 import {
-  getStoredEvents,
-  saveStoredEvents
+  fetchEvents,
+  subscribeToEventsRealtime,
+  createEventInDb,
+  joinEventInDb,
+  removeParticipantFromDb,
+  saveAvailabilityInDb,
+  updateEventFieldsInDb,
+  addTimeSuggestionInDb,
+  voteTimeSuggestionInDb,
+  addLocationSuggestionInDb,
+  voteLocationInDb,
+  createDemoEventForUser
 } from './services/storage';
 import {
   getCurrentSession,
+  subscribeToAuth,
   logoutUser,
   updateUserAvatar
 } from './services/auth';
@@ -45,17 +56,16 @@ import { useI18n } from './services/i18n';
 
 export default function App() {
   const { t, lang } = useI18n();
-  const [events, setEvents] = useState(() => getStoredEvents());
-  const [currentUser, setCurrentUser] = useState(() => getCurrentSession());
+  const [events, setEvents] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isLoadingInitial, setIsLoadingInitial] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [isSeedingDemo, setIsSeedingDemo] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
 
   const [currentEventId, setCurrentEventId] = useState(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const eventParam = urlParams.get('event');
-    if (eventParam && getStoredEvents().some(e => e.id === eventParam)) {
-      return eventParam;
-    }
-    return getStoredEvents()[0]?.id || '';
+    return urlParams.get('event') || '';
   });
 
   const [activeTab, setActiveTab] = useState('heatmap'); // 'heatmap' (tela principal) | 'voting' | 'suggestions' | 'locations'
@@ -67,18 +77,75 @@ export default function App() {
   const [joinConfirmation, setJoinConfirmation] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
 
-  // Salva no storage quando events mudar
-  useEffect(() => {
-    saveStoredEvents(events);
-  }, [events]);
-
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3000);
   };
 
-  const handleLogout = () => {
-    logoutUser();
+  const refreshEvents = async ({ silent = false } = {}) => {
+    if (!silent) setLoadError('');
+    try {
+      const loaded = await fetchEvents();
+      setEvents(loaded);
+      setCurrentEventId(prevId => {
+        if (prevId && loaded.some(e => e.id === prevId)) return prevId;
+        return loaded[0]?.id || '';
+      });
+    } catch (err) {
+      if (!silent) {
+        setLoadError(err.message || 'Não foi possível carregar os eventos do servidor.');
+      } else {
+        console.error(err);
+      }
+    }
+  };
+
+  // Hidrata sessão e eventos do Supabase + assina Realtime e mudanças de Auth
+  useEffect(() => {
+    let active = true;
+
+    async function bootstrap() {
+      setIsLoadingInitial(true);
+      try {
+        const [sessionUser, initialEvents] = await Promise.all([
+          getCurrentSession(),
+          fetchEvents()
+        ]);
+        if (!active) return;
+        setCurrentUser(sessionUser);
+        setEvents(initialEvents);
+        setCurrentEventId(prevId => {
+          if (prevId && initialEvents.some(e => e.id === prevId)) return prevId;
+          return initialEvents[0]?.id || '';
+        });
+      } catch (err) {
+        if (active) {
+          setLoadError(err.message || 'Erro ao conectar com o Supabase.');
+        }
+      } finally {
+        if (active) setIsLoadingInitial(false);
+      }
+    }
+
+    bootstrap();
+
+    const unsubscribeAuth = subscribeToAuth(profile => {
+      if (active) setCurrentUser(profile);
+    });
+
+    const unsubscribeRealtime = subscribeToEventsRealtime(() => {
+      if (active) refreshEvents({ silent: true });
+    });
+
+    return () => {
+      active = false;
+      unsubscribeAuth();
+      unsubscribeRealtime();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await logoutUser();
     setCurrentUser(null);
     showToast('Você saiu da sua conta.');
   };
@@ -89,9 +156,10 @@ export default function App() {
     showToast(`Bem-vindo, ${session.name}!`);
   };
 
-  const handleSaveAvatar = (newAvatar) => {
+  const handleSaveAvatar = async (newAvatar) => {
     if (!currentUser) return;
-    const updatedSession = updateUserAvatar(currentUser.id, newAvatar);
+    const updatedSession = await updateUserAvatar(currentUser.id, newAvatar);
+    const finalAvatar = updatedSession.avatar;
     setCurrentUser({ ...updatedSession });
 
     setEvents(prevEvents =>
@@ -99,14 +167,14 @@ export default function App() {
         let evtModified = false;
         let updatedOrganizer = evt.organizer;
         if (evt.organizer?.id === currentUser.id) {
-          updatedOrganizer = { ...evt.organizer, avatar: newAvatar };
+          updatedOrganizer = { ...evt.organizer, avatar: finalAvatar };
           evtModified = true;
         }
 
         const updatedParticipants = (evt.participants || []).map(p => {
           if (p.id === currentUser.id) {
             evtModified = true;
-            return { ...p, avatar: newAvatar };
+            return { ...p, avatar: finalAvatar };
           }
           return p;
         });
@@ -114,7 +182,7 @@ export default function App() {
         const updatedSuggestions = (evt.customSuggestions || []).map(sug => {
           if (sug.creator?.id === currentUser.id) {
             evtModified = true;
-            return { ...sug, creator: { ...sug.creator, avatar: newAvatar } };
+            return { ...sug, creator: { ...sug.creator, avatar: finalAvatar } };
           }
           return sug;
         });
@@ -122,7 +190,7 @@ export default function App() {
         const updatedLocations = (evt.locationSuggestions || []).map(loc => {
           if (loc.creator?.id === currentUser.id) {
             evtModified = true;
-            return { ...loc, creator: { ...loc.creator, avatar: newAvatar } };
+            return { ...loc, creator: { ...loc.creator, avatar: finalAvatar } };
           }
           return loc;
         });
@@ -139,10 +207,10 @@ export default function App() {
       })
     );
 
-    showToast(newAvatar ? t('profileSuccessToast') : t('profileInitialsToast'));
+    showToast(finalAvatar ? t('profileSuccessToast') : t('profileInitialsToast'));
   };
 
-  const currentEvent = events.find(e => e.id === currentEventId) || events[0];
+  const currentEvent = events.find(e => e.id === currentEventId) || events[0] || null;
 
   // Auto-adiciona o usuário ao acessar o link do evento
   useEffect(() => {
@@ -151,6 +219,8 @@ export default function App() {
     const isAlreadyParticipant = (currentEvent.participants || []).some(p => p.id === currentUser.id);
 
     if (!isAlreadyParticipant) {
+      const targetEventId = currentEvent.id;
+      const targetEventTitle = currentEvent.title;
       const newParticipant = {
         id: currentUser.id,
         name: currentUser.name,
@@ -164,7 +234,8 @@ export default function App() {
 
       setEvents(prevEvents =>
         prevEvents.map(evt => {
-          if (evt.id !== currentEvent.id) return evt;
+          if (evt.id !== targetEventId) return evt;
+          if ((evt.participants || []).some(p => p.id === currentUser.id)) return evt;
           return {
             ...evt,
             participants: [...(evt.participants || []), newParticipant]
@@ -172,23 +243,26 @@ export default function App() {
         })
       );
 
-      setJoinConfirmation({
-        eventName: currentEvent.title,
-        userName: currentUser.name
-      });
-      showToast(`✓ Você foi adicionado automaticamente ao evento "${currentEvent.title}"!`);
+      joinEventInDb(targetEventId, currentUser.id)
+        .then(() => {
+          setJoinConfirmation({
+            eventName: targetEventTitle,
+            userName: currentUser.name
+          });
+          showToast(`✓ Você foi adicionado automaticamente ao evento "${targetEventTitle}"!`);
+        })
+        .catch(err => {
+          console.error(err);
+          refreshEvents({ silent: true });
+        });
     }
   }, [currentEvent?.id, currentUser?.id]);
 
-  if (!currentEvent) {
-    return <div style={{ padding: '2rem', textAlign: 'center' }}>Carregando agendador...</div>;
-  }
-
-  const isOrganizer = currentUser && currentEvent.organizer?.id === currentUser.id;
+  const isOrganizer = Boolean(currentUser && currentEvent?.organizer?.id === currentUser.id);
 
   // Organizador remove participante do evento
-  const handleRemoveParticipant = (participantId, participantName) => {
-    if (!isOrganizer) return;
+  const handleRemoveParticipant = async (participantId, participantName) => {
+    if (!isOrganizer || !currentEvent) return;
 
     if (participantId === currentEvent.organizer?.id) {
       alert('O organizador do evento não pode ser removido.');
@@ -198,9 +272,10 @@ export default function App() {
     const confirmed = window.confirm(`Tem certeza que deseja remover ${participantName} deste evento?`);
     if (!confirmed) return;
 
+    const targetEventId = currentEvent.id;
     setEvents(prevEvents =>
       prevEvents.map(evt => {
-        if (evt.id !== currentEvent.id) return evt;
+        if (evt.id !== targetEventId) return evt;
         return {
           ...evt,
           participants: evt.participants.filter(p => p.id !== participantId),
@@ -218,30 +293,39 @@ export default function App() {
       })
     );
 
-    showToast(`${participantName} foi removido do evento pelo organizador.`);
+    try {
+      await removeParticipantFromDb(targetEventId, participantId);
+      showToast(`${participantName} foi removido do evento pelo organizador.`);
+    } catch (err) {
+      showToast(err.message || 'Erro ao remover participante.');
+      refreshEvents({ silent: true });
+    }
   };
 
   // Atualiza disponibilidade do participante logado
-  const handleSaveAvailability = (updatedParticipantData) => {
+  const handleSaveAvailability = async (updatedParticipantData) => {
     if (!currentUser) {
       setIsAuthOpen(true);
       return;
     }
+    if (!currentEvent) return;
 
+    const targetEventId = currentEvent.id;
     setEvents(prevEvents =>
       prevEvents.map(evt => {
-        if (evt.id !== currentEvent.id) return evt;
+        if (evt.id !== targetEventId) return evt;
 
         const existingIndex = evt.participants.findIndex(p => p.id === updatedParticipantData.userId);
-        let updatedParticipants = [...evt.participants];
+        const updatedParticipants = [...evt.participants];
 
         const participantObj = {
           id: updatedParticipantData.userId,
           name: updatedParticipantData.name,
           email: updatedParticipantData.email,
           avatar: updatedParticipantData.avatar,
-          availabilities: updatedParticipantData.availabilities,
-          suggestions: updatedParticipantData.suggestions,
+          availabilities: updatedParticipantData.availabilities || {},
+          customIntervals: updatedParticipantData.customIntervals || [],
+          suggestions: updatedParticipantData.suggestions || [],
           updatedAt: new Date().toISOString()
         };
 
@@ -251,7 +335,6 @@ export default function App() {
           updatedParticipants.push(participantObj);
         }
 
-        // Se o participante sugeriu datas extras fora das datas originais do organizador
         let newExtraDates = evt.extraDates || [];
         if (updatedParticipantData.extraDates && updatedParticipantData.extraDates.length) {
           updatedParticipantData.extraDates.forEach(d => {
@@ -269,20 +352,27 @@ export default function App() {
       })
     );
 
-    showToast('Disponibilidade salva no estilo Google Agenda!');
-    setActiveTab('heatmap');
+    try {
+      await saveAvailabilityInDb(targetEventId, updatedParticipantData);
+      showToast('Disponibilidade salva com sucesso!');
+      setActiveTab('heatmap');
+    } catch (err) {
+      showToast(err.message || 'Erro ao salvar disponibilidade.');
+      refreshEvents({ silent: true });
+    }
   };
 
   // Organizador confirma um horário
-  const handleConfirmSlot = (slot) => {
-    if (!isOrganizer) {
+  const handleConfirmSlot = async (slot) => {
+    if (!isOrganizer || !currentEvent) {
       alert('Apenas o organizador pode confirmar o horário final do evento.');
       return;
     }
 
+    const targetEventId = currentEvent.id;
     setEvents(prevEvents =>
       prevEvents.map(evt => {
-        if (evt.id !== currentEvent.id) return evt;
+        if (evt.id !== targetEventId) return evt;
         return {
           ...evt,
           status: 'confirmed',
@@ -290,15 +380,26 @@ export default function App() {
         };
       })
     );
-    showToast(`Horário confirmado com sucesso para ${slot.date}!`);
+
+    try {
+      await updateEventFieldsInDb(targetEventId, {
+        status: 'confirmed',
+        confirmed_slot: slot
+      });
+      showToast(`Horário confirmado com sucesso para ${slot.date}!`);
+    } catch (err) {
+      showToast(err.message || 'Erro ao confirmar horário.');
+      refreshEvents({ silent: true });
+    }
   };
 
   // Organizador reabre a votação
-  const handleReopenVoting = () => {
-    if (!isOrganizer) return;
+  const handleReopenVoting = async () => {
+    if (!isOrganizer || !currentEvent) return;
+    const targetEventId = currentEvent.id;
     setEvents(prevEvents =>
       prevEvents.map(evt => {
-        if (evt.id !== currentEvent.id) return evt;
+        if (evt.id !== targetEventId) return evt;
         return {
           ...evt,
           status: 'voting',
@@ -306,11 +407,21 @@ export default function App() {
         };
       })
     );
-    showToast('Votação reaberta para os participantes!');
+
+    try {
+      await updateEventFieldsInDb(targetEventId, {
+        status: 'voting',
+        confirmed_slot: null
+      });
+      showToast('Votação reaberta para os participantes!');
+    } catch (err) {
+      showToast(err.message || 'Erro ao reabrir votação.');
+      refreshEvents({ silent: true });
+    }
   };
 
   // Organizador altera status do evento (voting, confirmed, completed, canceled)
-  const handleUpdateEventStatus = (newStatus, targetEventId = currentEvent.id) => {
+  const handleUpdateEventStatus = async (newStatus, targetEventId = currentEvent?.id) => {
     const targetEvt = events.find(e => e.id === targetEventId);
     if (!targetEvt) return;
     const isTargetOrganizer = currentUser && targetEvt.organizer?.id === currentUser.id;
@@ -329,30 +440,72 @@ export default function App() {
       })
     );
 
-    const labels = {
-      voting: t('actionReopenVoting') + ' (Pendente)',
-      confirmed: t('statusConfirmed'),
-      completed: t('statusCompleted'),
-      canceled: t('statusCanceled')
-    };
-    showToast(`✓ Status alterado para: ${labels[newStatus] || newStatus}`);
+    try {
+      await updateEventFieldsInDb(targetEventId, { status: newStatus });
+      const labels = {
+        voting: t('actionReopenVoting') + ' (Pendente)',
+        confirmed: t('statusConfirmed'),
+        completed: t('statusCompleted'),
+        canceled: t('statusCanceled')
+      };
+      showToast(`✓ Status alterado para: ${labels[newStatus] || newStatus}`);
+    } catch (err) {
+      showToast(err.message || 'Erro ao alterar status.');
+      refreshEvents({ silent: true });
+    }
   };
 
   // Criação de novo evento
-  const handleCreateEvent = (newEvent) => {
+  const handleCreateEvent = async (newEvent) => {
     if (!currentUser) {
       setIsAuthOpen(true);
       return;
     }
-    setEvents([newEvent, ...events]);
-    showToast('Novo evento criado com sucesso!');
+
+    setEvents(prev => [newEvent, ...prev]);
+    setCurrentEventId(newEvent.id);
+    setIsCreateOpen(false);
+
+    try {
+      await createEventInDb(newEvent, currentUser.id);
+      await refreshEvents({ silent: true });
+      showToast('Novo evento criado com sucesso!');
+    } catch (err) {
+      showToast(err.message || 'Erro ao criar evento.');
+      refreshEvents({ silent: true });
+    }
+  };
+
+  const handleSeedDemoEvent = async () => {
+    if (!currentUser) {
+      setIsAuthOpen(true);
+      return;
+    }
+    setIsSeedingDemo(true);
+    try {
+      const demoId = await createDemoEventForUser(currentUser);
+      await refreshEvents({ silent: true });
+      setCurrentEventId(demoId);
+      showToast('Evento de demonstração criado com sucesso!');
+    } catch (err) {
+      showToast(err.message || 'Erro ao criar evento de demonstração.');
+    } finally {
+      setIsSeedingDemo(false);
+    }
   };
 
   // Adiciona nova sugestão coletiva de dia e horário
-  const handleAddSuggestion = (newSug) => {
+  const handleAddSuggestion = async (newSug) => {
+    if (!currentUser) {
+      setIsAuthOpen(true);
+      return;
+    }
+    if (!currentEvent) return;
+
+    const targetEventId = currentEvent.id;
     setEvents(prevEvents =>
       prevEvents.map(evt => {
-        if (evt.id !== currentEvent.id) return evt;
+        if (evt.id !== targetEventId) return evt;
         const currentList = evt.customSuggestions || [];
         return {
           ...evt,
@@ -360,19 +513,28 @@ export default function App() {
         };
       })
     );
-    showToast('Nova sugestão cadastrada para todos os participantes!');
+
+    try {
+      await addTimeSuggestionInDb(targetEventId, newSug, currentUser.id);
+      showToast('Nova sugestão cadastrada para todos os participantes!');
+    } catch (err) {
+      showToast(err.message || 'Erro ao salvar sugestão de horário.');
+      refreshEvents({ silent: true });
+    }
   };
 
   // Vota em uma sugestão coletiva existente
-  const handleVoteSuggestion = (sugId, voteType) => {
+  const handleVoteSuggestion = async (sugId, voteType) => {
     if (!currentUser) {
       setIsAuthOpen(true);
       return;
     }
+    if (!currentEvent) return;
 
+    const targetEventId = currentEvent.id;
     setEvents(prevEvents =>
       prevEvents.map(evt => {
-        if (evt.id !== currentEvent.id) return evt;
+        if (evt.id !== targetEventId) return evt;
         const updatedList = (evt.customSuggestions || []).map(sug => {
           if (sug.id !== sugId) return sug;
           return {
@@ -390,29 +552,52 @@ export default function App() {
       })
     );
 
-    showToast(`Voto registrado como ${voteType === 'available' ? 'Disponível ✓' : 'Indisponível ✗'}!`);
+    try {
+      await voteTimeSuggestionInDb(sugId, currentUser.id, voteType);
+      showToast(`Voto registrado como ${voteType === 'available' ? 'Disponível ✓' : 'Indisponível ✗'}!`);
+    } catch (err) {
+      showToast(err.message || 'Erro ao registrar voto.');
+      refreshEvents({ silent: true });
+    }
   };
 
   // Alterna permissão de sugestões de locais pelo organizador
-  const handleToggleLocationSuggestions = (allowed) => {
-    if (!isOrganizer) return;
+  const handleToggleLocationSuggestions = async (allowed) => {
+    if (!isOrganizer || !currentEvent) return;
+    const targetEventId = currentEvent.id;
     setEvents(prevEvents =>
       prevEvents.map(evt => {
-        if (evt.id !== currentEvent.id) return evt;
+        if (evt.id !== targetEventId) return evt;
         return {
           ...evt,
           allowLocationSuggestions: allowed
         };
       })
     );
-    showToast(`Votação de locais ${allowed ? 'aberta' : 'encerrada'} pelo organizador!`);
+
+    try {
+      await updateEventFieldsInDb(targetEventId, {
+        allow_location_suggestions: allowed
+      });
+      showToast(`Votação de locais ${allowed ? 'aberta' : 'encerrada'} pelo organizador!`);
+    } catch (err) {
+      showToast(err.message || 'Erro ao alterar permissão de locais.');
+      refreshEvents({ silent: true });
+    }
   };
 
   // Adiciona nova sugestão de local proposta por qualquer participante
-  const handleAddLocationSuggestion = (newLocation) => {
+  const handleAddLocationSuggestion = async (newLocation) => {
+    if (!currentUser) {
+      setIsAuthOpen(true);
+      return;
+    }
+    if (!currentEvent) return;
+
+    const targetEventId = currentEvent.id;
     setEvents(prevEvents =>
       prevEvents.map(evt => {
-        if (evt.id !== currentEvent.id) return evt;
+        if (evt.id !== targetEventId) return evt;
         const currentLocs = evt.locationSuggestions || [];
         return {
           ...evt,
@@ -420,30 +605,39 @@ export default function App() {
         };
       })
     );
-    showToast('Nova sugestão de local cadastrada com sucesso!');
+
+    try {
+      await addLocationSuggestionInDb(targetEventId, newLocation, currentUser.id);
+      showToast('Nova sugestão de local cadastrada com sucesso!');
+    } catch (err) {
+      showToast(err.message || 'Erro ao salvar sugestão de local.');
+      refreshEvents({ silent: true });
+    }
   };
 
   // Vota em uma sugestão de local (aprovar / reprovar)
-  const handleVoteLocation = (locationId, voteType) => {
+  const handleVoteLocation = async (locationId, voteType) => {
     if (!currentUser) {
       setIsAuthOpen(true);
       return;
     }
+    if (!currentEvent) return;
+
+    const targetEventId = currentEvent.id;
+    const targetLoc = (currentEvent.locationSuggestions || []).find(l => l.id === locationId);
+    const shouldRemoveVote = targetLoc?.votes?.[currentUser.id] === voteType;
 
     setEvents(prevEvents =>
       prevEvents.map(evt => {
-        if (evt.id !== currentEvent.id) return evt;
+        if (evt.id !== targetEventId) return evt;
         const updatedLocs = (evt.locationSuggestions || []).map(loc => {
           if (loc.id !== locationId) return loc;
-          const currentVote = loc.votes?.[currentUser.id];
           const newVotes = { ...(loc.votes || {}) };
-
-          if (currentVote === voteType) {
+          if (shouldRemoveVote) {
             delete newVotes[currentUser.id];
           } else {
             newVotes[currentUser.id] = voteType;
           }
-
           return {
             ...loc,
             votes: newVotes
@@ -457,24 +651,44 @@ export default function App() {
       })
     );
 
-    showToast(`Voto registrado (${voteType === 'approve' ? 'Aprovado 👍' : 'Reprovado 👎'})!`);
+    try {
+      await voteLocationInDb(locationId, currentUser.id, voteType, shouldRemoveVote);
+      showToast(
+        shouldRemoveVote
+          ? 'Voto removido.'
+          : `Voto registrado (${voteType === 'approve' ? 'Aprovado 👍' : 'Reprovado 👎'})!`
+      );
+    } catch (err) {
+      showToast(err.message || 'Erro ao votar no local.');
+      refreshEvents({ silent: true });
+    }
   };
 
   // Organizador seleciona um local sugerido como o oficial
-  const handleSelectOfficialLocation = (title, address) => {
-    if (!isOrganizer) return;
+  const handleSelectOfficialLocation = async (title, address) => {
+    if (!isOrganizer || !currentEvent) return;
 
+    const targetEventId = currentEvent.id;
     const fullLocationStr = address ? `${title} (${address})` : title;
     setEvents(prevEvents =>
       prevEvents.map(evt => {
-        if (evt.id !== currentEvent.id) return evt;
+        if (evt.id !== targetEventId) return evt;
         return {
           ...evt,
           locationDetails: fullLocationStr
         };
       })
     );
-    showToast(`Local oficial atualizado para "${title}"!`);
+
+    try {
+      await updateEventFieldsInDb(targetEventId, {
+        location_details: fullLocationStr
+      });
+      showToast(`Local oficial atualizado para "${title}"!`);
+    } catch (err) {
+      showToast(err.message || 'Erro ao definir local oficial.');
+      refreshEvents({ silent: true });
+    }
   };
 
   const formatDurationText = (mins) => {
@@ -511,6 +725,99 @@ export default function App() {
       />
 
       <main className="app-main">
+        {isLoadingInitial ? (
+          <div style={{
+            background: 'white',
+            border: '1px solid var(--border-color)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '3.5rem 1.5rem',
+            textAlign: 'center',
+            boxShadow: 'var(--shadow-sm)'
+          }}>
+            <Clock size={32} color="var(--primary)" style={{ margin: '0 auto 0.75rem auto' }} />
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)' }}>
+              Sincronizando eventos...
+            </h2>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: 6 }}>
+              Conectando ao banco de dados para carregar disponibilidades e votações.
+            </p>
+          </div>
+        ) : loadError ? (
+          <div style={{
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: 'var(--radius-lg)',
+            padding: '2.5rem 1.5rem',
+            textAlign: 'center'
+          }}>
+            <XCircle size={32} color="#b91c1c" style={{ margin: '0 auto 0.75rem auto' }} />
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#991b1b' }}>
+              Falha ao carregar os dados
+            </h2>
+            <p style={{ fontSize: '0.9rem', color: '#b91c1c', marginTop: 6, marginBottom: '1.25rem' }}>
+              {loadError}
+            </p>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => refreshEvents()}
+              style={{ padding: '0.65rem 1.35rem' }}
+            >
+              <RotateCcw size={16} />
+              <span>Tentar novamente</span>
+            </button>
+          </div>
+        ) : !currentEvent ? (
+          <div style={{
+            background: 'white',
+            border: '1px solid var(--border-color)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '3.5rem 1.5rem',
+            textAlign: 'center',
+            boxShadow: 'var(--shadow-sm)',
+            maxWidth: 620,
+            margin: '1.5rem auto'
+          }}>
+            <Calendar size={38} color="var(--primary)" style={{ margin: '0 auto 0.85rem auto' }} />
+            <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-main)' }}>
+              Nenhum evento cadastrado ainda
+            </h2>
+            <p style={{ fontSize: '0.92rem', color: 'var(--text-muted)', marginTop: 8, marginBottom: '1.5rem' }}>
+              {currentUser
+                ? 'Crie o primeiro evento da sua agenda ou gere um evento de demonstração para testar a votação em grupo.'
+                : 'Entre na sua conta ou crie um cadastro rápido para organizar seu primeiro evento coletivo.'}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => {
+                  if (!currentUser) {
+                    setIsAuthOpen(true);
+                  } else {
+                    setIsCreateOpen(true);
+                  }
+                }}
+                style={{ padding: '0.7rem 1.4rem' }}
+              >
+                <CalendarCheck2 size={18} />
+                <span>{currentUser ? 'Criar Primeiro Evento' : 'Entrar e Criar Evento'}</span>
+              </button>
+              {currentUser && (
+                <button
+                  type="button"
+                  disabled={isSeedingDemo}
+                  className="btn-secondary"
+                  onClick={handleSeedDemoEvent}
+                  style={{ padding: '0.7rem 1.25rem' }}
+                >
+                  <span>{isSeedingDemo ? 'Criando exemplo...' : 'Gerar Evento de Exemplo'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
         {/* Banner de Evento Confirmado */}
         {currentEvent.status === 'confirmed' && currentEvent.confirmedSlot && (
           <ConfirmedBanner
@@ -981,6 +1288,8 @@ export default function App() {
             )}
           </section>
         </div>
+          </>
+        )}
       </main>
 
       {/* Modais */}
@@ -1004,21 +1313,21 @@ export default function App() {
         <MyEventsModal
           events={events}
           currentUser={currentUser || { id: 'anonymous' }}
-          currentEventId={currentEvent.id}
+          currentEventId={currentEvent?.id || ''}
           onSelectEvent={(id) => setCurrentEventId(id)}
           onClose={() => setIsHistoryOpen(false)}
           onUpdateEventStatus={handleUpdateEventStatus}
         />
       )}
 
-      {isShareOpen && (
+      {isShareOpen && currentEvent && (
         <ShareModal
           event={currentEvent}
           onClose={() => setIsShareOpen(false)}
         />
       )}
 
-      {isParticipantsOpen && (
+      {isParticipantsOpen && currentEvent && (
         <ParticipantsModal
           event={currentEvent}
           currentUser={currentUser}

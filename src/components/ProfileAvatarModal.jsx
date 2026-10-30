@@ -34,6 +34,7 @@ export default function ProfileAvatarModal({
   const [selectedAvatar, setSelectedAvatar] = useState(currentUser?.avatar || '');
   const [urlInput, setUrlInput] = useState('');
   const [activeMode, setActiveMode] = useState('upload'); // 'upload' | 'url' | 'presets'
+  const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
 
   if (!currentUser) return null;
@@ -94,9 +95,16 @@ export default function ProfileAvatarModal({
     setSelectedAvatar(''); // Ao limpar, ativa as iniciais (ex: Victor Reghini -> VR)
   };
 
-  const handleSave = () => {
-    onSaveAvatar(selectedAvatar);
-    onClose();
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSaveAvatar(selectedAvatar);
+      onClose();
+    } catch (err) {
+      alert(err?.message || 'Erro ao salvar foto de perfil.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -373,11 +381,12 @@ export default function ProfileAvatarModal({
             </button>
             <button
               type="button"
+              disabled={saving}
               className="btn-primary"
               onClick={handleSave}
               style={{ fontSize: '0.85rem', padding: '0.5rem 1.15rem' }}
             >
-              <Check size={16} /> {t('profileSaveBtn')}
+              <Check size={16} /> {saving ? 'Salvando...' : t('profileSaveBtn')}
             </button>
           </div>
         </div>
