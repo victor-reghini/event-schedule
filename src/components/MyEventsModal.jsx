@@ -118,7 +118,7 @@ export default function MyEventsModal({
           border: `1.5px solid ${isSelected ? 'var(--primary)' : 'var(--border-color)'}`,
           background: isSelected ? 'var(--primary-light)' : 'white',
           borderRadius: 'var(--radius-md)',
-          padding: '1rem',
+          padding: '0.85rem 1rem',
           cursor: 'pointer',
           display: 'flex',
           flexDirection: 'column',
@@ -127,12 +127,13 @@ export default function MyEventsModal({
           boxShadow: isSelected ? '0 0 0 2px var(--primary-border)' : 'var(--shadow-sm)'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem', minWidth: 0 }}>
-            <span style={{ fontSize: '1.35rem', lineHeight: 1 }}>{evt.emoji || '📅'}</span>
-            <div style={{ minWidth: 0 }}>
+        {/* Linha 1: Título, Emoji, Badge de Organizador e Ações Rápidas */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.65rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, flex: 1 }}>
+            <span style={{ fontSize: '1.35rem', lineHeight: 1, flexShrink: 0 }}>{evt.emoji || '📅'}</span>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 800, fontSize: '0.98rem', color: 'var(--text-main)' }}>
+                <span style={{ fontWeight: 800, fontSize: '0.98rem', color: 'var(--text-main)', lineHeight: 1.3 }}>
                   {evt.title}
                 </span>
                 {isSelected && (
@@ -142,29 +143,11 @@ export default function MyEventsModal({
                     background: 'var(--primary)',
                     color: 'white',
                     padding: '0.15rem 0.45rem',
-                    borderRadius: 4
+                    borderRadius: 4,
+                    whiteSpace: 'nowrap'
                   }}>
                     {t('you')} ({t('organizer')})
                   </span>
-                )}
-              </div>
-
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Avatar src={evt.organizer?.avatar} name={evt.organizer?.name} size={16} />
-                  <span>{evt.organizer?.name}</span>
-                </span>
-                <span>•</span>
-                <span>⏱️ {Math.floor((evt.duration || 60) / 60)}h</span>
-                <span>•</span>
-                <span>👥 {evt.participants?.length || 0} {t('participants')}</span>
-                {evt.locationDetails && (
-                  <>
-                    <span>•</span>
-                    <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      📍 {evt.locationDetails}
-                    </span>
-                  </>
                 )}
               </div>
             </div>
@@ -172,71 +155,127 @@ export default function MyEventsModal({
 
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {isOrg && onEditEvent && (
-                <button
-                  type="button"
-                  onClick={() => onEditEvent(evt)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: '#64748b',
-                    padding: '0.25rem',
-                    borderRadius: 'var(--radius-sm)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.15s ease'
-                  }}
-                  title={t('editEvent')}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--primary)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = '#64748b'; }}
-                >
-                  <Pencil size={14} />
-                </button>
-              )}
+            {isOrg && onEditEvent && (
+              <button
+                type="button"
+                onClick={() => onEditEvent(evt)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                  padding: '0.25rem',
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                title={t('editEvent')}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--primary)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = '#64748b'; }}
+              >
+                <Pencil size={15} />
+              </button>
+            )}
 
-              {isOrg && onDeleteEvent && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const msg = t('confirmDeleteEvent') || `Tem certeza que deseja excluir o evento "${evt.title}"?`;
-                    if (window.confirm(msg)) {
-                      onDeleteEvent(evt.id);
-                    }
-                  }}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: '#94a3b8',
-                    padding: '0.25rem',
-                    borderRadius: 'var(--radius-sm)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.15s ease'
-                  }}
-                  title={t('deleteEvent')}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = '#94a3b8'; }}
-                >
-                  <Trash2 size={14} />
-                </button>
-              )}
+            {isOrg && onDeleteEvent && (
+              <button
+                type="button"
+                onClick={() => {
+                  const msg = t('confirmDeleteEvent') || `Tem certeza que deseja excluir o evento "${evt.title}"?`;
+                  if (window.confirm(msg)) {
+                    onDeleteEvent(evt.id);
+                  }
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#94a3b8',
+                  padding: '0.25rem',
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                title={t('deleteEvent')}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = '#94a3b8'; }}
+              >
+                <Trash2 size={15} />
+              </button>
+            )}
 
-              <EventStatusBadge
-                status={eventStatus}
-                size="sm"
-                align="right"
-                isOrganizer={isOrg}
-                onStatusChange={onUpdateEventStatus ? (newStatus) => onUpdateEventStatus(newStatus, evt.id) : null}
-              />
-            </div>
-            <ArrowRight size={16} color={isSelected ? 'var(--primary)' : '#94a3b8'} style={{ marginTop: 2 }} />
+            <ArrowRight size={16} color={isSelected ? 'var(--primary)' : '#94a3b8'} />
+          </div>
+        </div>
+
+        {/* Linha 2: Metadados alinhados e Status Badge */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.65rem',
+          paddingTop: '0.4rem',
+          borderTop: '1px solid rgba(0, 0, 0, 0.05)'
+        }}>
+          {/* Detalhes: organizador, duração, participantes, local */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.65rem',
+            flexWrap: 'wrap',
+            fontSize: '0.78rem',
+            color: 'var(--text-muted)'
+          }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+              <Avatar src={evt.organizer?.avatar} name={evt.organizer?.name} size={16} />
+              <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>{evt.organizer?.name}</span>
+            </span>
+
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+              <Clock size={13} color="#64748b" />
+              <span>{Math.floor((evt.duration || 60) / 60)}h</span>
+            </span>
+
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+              <Users size={13} color="#64748b" />
+              <span>{evt.participants?.length || 0} {t('participants')}</span>
+            </span>
+
+            {evt.locationDetails && (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                maxWidth: 220,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                <MapPin size={13} color="#64748b" />
+                <span>{evt.locationDetails}</span>
+              </span>
+            )}
+          </div>
+
+          {/* Status Badge */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ flexShrink: 0, marginLeft: 'auto' }}
+          >
+            <EventStatusBadge
+              status={eventStatus}
+              size="sm"
+              align="right"
+              isOrganizer={isOrg}
+              onStatusChange={onUpdateEventStatus ? (newStatus) => onUpdateEventStatus(newStatus, evt.id) : null}
+            />
           </div>
         </div>
       </div>

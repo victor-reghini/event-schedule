@@ -37,6 +37,7 @@ const TRANSLATIONS = {
     guest: 'Convidado',
     you: 'Você',
     authenticatedAs: 'Autenticado como',
+    language: 'Idioma',
 
     // Tabs
     tabGroupOverview: 'Visão Geral do Grupo',
@@ -285,6 +286,7 @@ const TRANSLATIONS = {
     guest: 'Guest',
     you: 'You',
     authenticatedAs: 'Signed in as',
+    language: 'Language',
 
     tabGroupOverview: 'Group Overview',
     tabMyAvailability: 'My Availability',
@@ -521,6 +523,7 @@ const TRANSLATIONS = {
     guest: 'Invitado',
     you: 'Tú',
     authenticatedAs: 'Conectado como',
+    language: 'Idioma',
 
     tabGroupOverview: 'Visión General del Grupo',
     tabMyAvailability: 'Mi Disponibilidad',
@@ -757,6 +760,7 @@ const TRANSLATIONS = {
     guest: 'Invitato',
     you: 'Tu',
     authenticatedAs: 'Connesso come',
+    language: 'Lingua',
 
     tabGroupOverview: 'Panoramica del Gruppo',
     tabMyAvailability: 'La Mia Disponibilità',
@@ -993,6 +997,7 @@ const TRANSLATIONS = {
     guest: 'Invité',
     you: 'Vous',
     authenticatedAs: 'Connecté en tant que',
+    language: 'Langue',
 
     tabGroupOverview: 'Vue d\'Ensemble du Groupe',
     tabMyAvailability: 'Mes Disponibilités',

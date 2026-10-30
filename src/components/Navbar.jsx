@@ -7,7 +7,9 @@ import {
   LogIn,
   Camera,
   ChevronDown,
-  HelpCircle
+  HelpCircle,
+  Globe,
+  Check
 } from 'lucide-react';
 import LanguageSelector from './LanguageSelector';
 import Avatar from './Avatar';
@@ -23,8 +25,9 @@ export default function Navbar({
   eventsCount,
   onStartTour
 }) {
-  const { t } = useI18n();
+  const { t, lang, setLang, currentLanguage, languages } = useI18n();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isLangSubmenuOpen, setIsLangSubmenuOpen] = useState(false);
   const dropdownRef = useRef(null);
 
   // Fecha o dropdown ao clicar fora
@@ -32,6 +35,7 @@ export default function Navbar({
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsDropdownOpen(false);
+        setIsLangSubmenuOpen(false);
       }
     }
     if (isDropdownOpen) {
@@ -49,6 +53,7 @@ export default function Navbar({
     function handleKeyDown(event) {
       if (event.key === 'Escape') {
         setIsDropdownOpen(false);
+        setIsLangSubmenuOpen(false);
       }
     }
     if (isDropdownOpen) {
@@ -73,18 +78,9 @@ export default function Navbar({
         </div>
 
         <div className="header-actions">
-          <LanguageSelector />
-
-          <button
-            type="button"
-            className="btn-header-tour"
-            onClick={onStartTour}
-            title={t('tourBtnTooltip')}
-            aria-label={t('tourBtn')}
-          >
-            <HelpCircle size={15} />
-            <span className="nav-btn-text">{t('tourBtn')}</span>
-          </button>
+          <div className={currentUser ? "header-language-desktop" : ""}>
+            <LanguageSelector />
+          </div>
 
           <button 
             className="btn-primary btn-header-action" 
@@ -249,6 +245,91 @@ export default function Navbar({
                       <span>{t('tourBtn')}</span>
                     </div>
                   </button>
+
+                  {/* Opção 4: Seletor de Idioma (visível na visão mobile) */}
+                  <div className="mobile-language-menu-item">
+                    <button
+                      type="button"
+                      className="user-dropdown-item"
+                      role="menuitem"
+                      onClick={() => setIsLangSubmenuOpen(prev => !prev)}
+                      aria-expanded={isLangSubmenuOpen}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                        <Globe size={16} color="var(--primary)" />
+                        <span>{t('language', { defaultValue: 'Idioma' })}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: '0.95rem', lineHeight: 1 }}>{currentLanguage.flag}</span>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-main)' }}>{currentLanguage.short}</span>
+                        <ChevronDown
+                          size={14}
+                          style={{
+                            color: 'var(--text-muted)',
+                            transition: 'transform 0.15s ease',
+                            transform: isLangSubmenuOpen ? 'rotate(180deg)' : 'none'
+                          }}
+                        />
+                      </div>
+                    </button>
+
+                    {isLangSubmenuOpen && (
+                      <div
+                        className="mobile-lang-suboptions"
+                        style={{
+                          padding: '0.35rem',
+                          margin: '0.15rem 0.75rem 0.5rem 0.75rem',
+                          background: '#f8fafc',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-color)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 2
+                        }}
+                      >
+                        {languages.map(item => {
+                          const isSelected = item.code === lang;
+                          return (
+                            <button
+                              key={item.code}
+                              type="button"
+                              onClick={() => {
+                                setLang(item.code);
+                                setIsLangSubmenuOpen(false);
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '0.5rem 0.65rem',
+                                borderRadius: '6px',
+                                border: 'none',
+                                background: isSelected ? '#e0f2fe' : 'transparent',
+                                color: isSelected ? 'var(--primary)' : 'var(--text-main)',
+                                fontWeight: isSelected ? 800 : 500,
+                                fontSize: '0.82rem',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                transition: 'background 0.12s ease'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontSize: '1.05rem', lineHeight: 1 }}>{item.flag}</span>
+                                <span>{item.name}</span>
+                              </div>
+                              {isSelected ? (
+                                <Check size={14} color="var(--primary)" />
+                              ) : (
+                                <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700 }}>
+                                  {item.short}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
 
                   <div className="user-dropdown-divider" />
 

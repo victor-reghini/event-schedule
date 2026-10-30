@@ -1,7 +1,20 @@
 import React, { useState } from 'react';
-import { X, Clock, MapPin, Video, FileText, Trash2, Check, AlertTriangle } from 'lucide-react';
+import { X, Clock, MapPin, Video, FileText, Trash2, Check, AlertTriangle, CalendarRange, CheckSquare, Plus } from 'lucide-react';
 import { DURATION_OPTIONS } from '../services/templates';
 import { useI18n } from '../services/i18n';
+
+// Gera lista de datas YYYY-MM-DD entre duas datas (inclusive)
+function generateDateRangeList(startDateStr, endDateStr) {
+  const result = [];
+  let curr = new Date(startDateStr + 'T00:00:00');
+  const end = new Date(endDateStr + 'T00:00:00');
+
+  while (curr <= end) {
+    result.push(curr.toISOString().split('T')[0]);
+    curr.setDate(curr.getDate() + 1);
+  }
+  return result;
+}
 
 export default function EditEventModal({
   event,
@@ -16,12 +29,62 @@ export default function EditEventModal({
   const [locationType, setLocationType] = useState(event.locationType || 'presencial');
   const [locationDetails, setLocationDetails] = useState(event.locationDetails || '');
   const [description, setDescription] = useState(event.description || '');
+
+  // Período Sugerido: 'range' (período contínuo) ou 'specific' (dias específicos)
+  const initialDateMode = event.dateMode || (event.dateRange ? 'range' : 'specific');
+  const [dateMode, setDateMode] = useState(initialDateMode);
+
+  const defaultStart = event.dateRange?.start || (event.dates?.[0] || new Date().toISOString().split('T')[0]);
+  const defaultEnd = event.dateRange?.end || (event.dates?.[event.dates?.length - 1] || defaultStart);
+  const [rangeStart, setRangeStart] = useState(defaultStart);
+  const [rangeEnd, setRangeEnd] = useState(defaultEnd);
+
+  const [specificDates, setSpecificDates] = useState(
+    Array.isArray(event.dates) && event.dates.length > 0
+      ? [...event.dates]
+      : [defaultStart]
+  );
+  const [newDateInput, setNewDateInput] = useState('');
+
+  // Sugestão de horário ideal
+  const [suggestedStartTime, setSuggestedStartTime] = useState(event.suggestedTimeWindow?.start || '');
+  const [suggestedEndTime, setSuggestedEndTime] = useState(event.suggestedTimeWindow?.end || '');
+
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  const handleAddSpecificDate = () => {
+    if (newDateInput && !specificDates.includes(newDateInput)) {
+      setSpecificDates([...specificDates, newDateInput].sort());
+      setNewDateInput('');
+    }
+  };
+
+  const handleRemoveSpecificDate = (dateToRemove) => {
+    if (specificDates.length > 1) {
+      setSpecificDates(specificDates.filter(d => d !== dateToRemove));
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim()) return;
+
+    let finalDates = [];
+    if (dateMode === 'range') {
+      if (rangeStart > rangeEnd) {
+        alert('A data de início do período deve ser anterior ou igual à data de término.');
+        return;
+      }
+      finalDates = generateDateRangeList(rangeStart, rangeEnd);
+    } else {
+      finalDates = specificDates;
+    }
+
+    if (!finalDates.length) {
+      alert('Selecione ao menos um dia para o evento.');
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -30,7 +93,11 @@ export default function EditEventModal({
         duration: Number(duration),
         locationType,
         locationDetails: locationDetails.trim(),
-        description: description.trim()
+        description: description.trim(),
+        dateMode,
+        dateRange: dateMode === 'range' ? { start: rangeStart, end: rangeEnd } : null,
+        suggestedTimeWindow: (suggestedStartTime && suggestedEndTime) ? { start: suggestedStartTime, end: suggestedEndTime } : null,
+        dates: finalDates
       });
       onClose();
     } catch (err) {
@@ -185,6 +252,173 @@ export default function EditEventModal({
               placeholder={locationType === 'online' ? 'Ex: Google Meet / Link da Chamada' : 'Ex: Restaurante, Pizzaria ou Endereço'}
               style={{ fontSize: '0.9rem' }}
             />
+          </div>
+
+          {/* DEFINIÇÃO DO PERÍODO DO EVENTO (INTERVALO OU DIAS ESPECÍFICOS) */}
+          <div className="form-group" style={{ margin: 0, background: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.85rem' }}>
+            <label className="form-label" style={{ fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: 5, marginBottom: '0.5rem' }}>
+              <CalendarRange size={15} color="var(--primary)" />
+              {t('datesWindow')}
+            </label>
+
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={() => setDateMode('range')}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  padding: '0.5rem',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.825rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: `1.5px solid ${dateMode === 'range' ? 'var(--primary)' : 'var(--border-color)'}`,
+                  background: dateMode === 'range' ? 'var(--primary-light)' : 'white',
+                  color: dateMode === 'range' ? 'var(--primary)' : 'var(--text-muted)'
+                }}
+              >
+                <CalendarRange size={15} />
+                Período Contínuo
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDateMode('specific')}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  padding: '0.5rem',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.825rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: `1.5px solid ${dateMode === 'specific' ? 'var(--primary)' : 'var(--border-color)'}`,
+                  background: dateMode === 'specific' ? 'var(--primary-light)' : 'white',
+                  color: dateMode === 'specific' ? 'var(--primary)' : 'var(--text-muted)'
+                }}
+              >
+                <CheckSquare size={15} />
+                Dias Específicos
+              </button>
+            </div>
+
+            {dateMode === 'range' ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
+                    Início
+                  </label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={rangeStart}
+                    onChange={(e) => setRangeStart(e.target.value)}
+                    required
+                    style={{ fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
+                    Término
+                  </label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={rangeEnd}
+                    onChange={(e) => setRangeEnd(e.target.value)}
+                    required
+                    style={{ fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginBottom: '0.65rem' }}>
+                  {specificDates.map(dStr => (
+                    <div 
+                      key={dStr}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '0.3rem 0.55rem',
+                        background: 'white',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '0.825rem',
+                        fontWeight: 600
+                      }}
+                    >
+                      <span>{dStr}</span>
+                      {specificDates.length > 1 && (
+                        <button 
+                          type="button" 
+                          onClick={() => handleRemoveSpecificDate(dStr)}
+                          style={{ color: '#94a3b8', display: 'flex', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="date"
+                    className="form-input"
+                    style={{ maxWidth: 180, fontSize: '0.85rem' }}
+                    value={newDateInput}
+                    onChange={(e) => setNewDateInput(e.target.value)}
+                  />
+                  <button 
+                    type="button" 
+                    className="btn-secondary" 
+                    onClick={handleAddSpecificDate}
+                    style={{ fontSize: '0.8rem', padding: '0.4rem 0.65rem' }}
+                  >
+                    <Plus size={14} />
+                    Adicionar Dia
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Sugestão de Faixa de Horário Preferencial */}
+            <div style={{ marginTop: '0.65rem', paddingTop: '0.65rem', borderTop: '1px solid var(--border-color)' }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)', display: 'block', marginBottom: 4 }}>
+                Sugestão de Horário Preferencial (Opcional)
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+                <div>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>Das:</span>
+                  <input
+                    type="time"
+                    className="form-input"
+                    value={suggestedStartTime}
+                    onChange={(e) => setSuggestedStartTime(e.target.value)}
+                    style={{ fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>Às:</span>
+                  <input
+                    type="time"
+                    className="form-input"
+                    value={suggestedEndTime}
+                    onChange={(e) => setSuggestedEndTime(e.target.value)}
+                    style={{ fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Descrição */}

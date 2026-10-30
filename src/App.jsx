@@ -535,11 +535,18 @@ export default function App() {
     }
   };
 
-  // Organizador edita dados do evento (título, duração, local, descrição)
+  // Organizador edita dados do evento (título, duração, local, descrição, período sugerido)
   const handleSaveEventDetails = async (updatedFields) => {
     if (!isOrganizer || !currentEvent) return;
 
     const targetEventId = currentEvent.id;
+    const packedTimeRange = {
+      ...(currentEvent.timeRange || { start: '08:00', end: '23:00', step: 60 }),
+      dateMode: updatedFields.dateMode || currentEvent.dateMode || 'specific',
+      dateRange: updatedFields.dateRange !== undefined ? updatedFields.dateRange : currentEvent.dateRange,
+      suggestedTimeWindow: updatedFields.suggestedTimeWindow !== undefined ? updatedFields.suggestedTimeWindow : currentEvent.suggestedTimeWindow
+    };
+
     setEvents(prevEvents =>
       prevEvents.map(evt => {
         if (evt.id !== targetEventId) return evt;
@@ -549,19 +556,29 @@ export default function App() {
           duration: updatedFields.duration,
           locationType: updatedFields.locationType,
           locationDetails: updatedFields.locationDetails,
-          description: updatedFields.description
+          description: updatedFields.description,
+          dates: updatedFields.dates || evt.dates,
+          dateMode: updatedFields.dateMode || evt.dateMode,
+          dateRange: updatedFields.dateRange !== undefined ? updatedFields.dateRange : evt.dateRange,
+          suggestedTimeWindow: updatedFields.suggestedTimeWindow !== undefined ? updatedFields.suggestedTimeWindow : evt.suggestedTimeWindow,
+          timeRange: packedTimeRange
         };
       })
     );
 
     try {
-      await updateEventFieldsInDb(targetEventId, {
+      const dbPayload = {
         title: updatedFields.title,
         duration: updatedFields.duration,
         location_type: updatedFields.locationType,
         location_details: updatedFields.locationDetails,
-        description: updatedFields.description
-      });
+        description: updatedFields.description,
+        time_range: packedTimeRange
+      };
+      if (updatedFields.dates) {
+        dbPayload.dates = updatedFields.dates;
+      }
+      await updateEventFieldsInDb(targetEventId, dbPayload);
       showToast('Dados do evento atualizados com sucesso!');
     } catch (err) {
       showToast(err.message || 'Erro ao atualizar dados do evento.');
