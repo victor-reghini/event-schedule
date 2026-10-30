@@ -25,6 +25,7 @@ export default function EventCreatorModal({
   const [description, setDescription] = useState(EVENT_PRESETS[0].description);
   const [duration, setDuration] = useState(EVENT_PRESETS[0].duration);
   const [locationType, setLocationType] = useState(EVENT_PRESETS[0].locationType);
+  const [locationDetails, setLocationDetails] = useState(EVENT_PRESETS[0].defaultLocation || '');
   const [privacy, setPrivacy] = useState('public'); // 'public' | 'private'
   const [allowLocationSuggestions, setAllowLocationSuggestions] = useState(true);
 
