@@ -6,7 +6,8 @@ import {
   LogOut,
   LogIn,
   Camera,
-  ChevronDown
+  ChevronDown,
+  HelpCircle
 } from 'lucide-react';
 import LanguageSelector from './LanguageSelector';
 import Avatar from './Avatar';
@@ -19,7 +20,8 @@ export default function Navbar({
   onOpenAuth,
   onLogout,
   onOpenProfileAvatar,
-  eventsCount
+  eventsCount,
+  onStartTour
 }) {
   const { t } = useI18n();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -72,6 +74,17 @@ export default function Navbar({
 
         <div className="header-actions">
           <LanguageSelector />
+
+          <button
+            type="button"
+            className="btn-header-tour"
+            onClick={onStartTour}
+            title={t('tourBtnTooltip')}
+            aria-label={t('tourBtn')}
+          >
+            <HelpCircle size={15} />
+            <span className="nav-btn-text">{t('tourBtn')}</span>
+          </button>
 
           <button 
             className="btn-primary btn-header-action" 
@@ -219,6 +232,22 @@ export default function Navbar({
                     }}>
                       {eventsCount}
                     </span>
+                  </button>
+
+                  {/* Opção 3: Tutorial / Como Funciona */}
+                  <button
+                    type="button"
+                    className="user-dropdown-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsDropdownOpen(false);
+                      onStartTour();
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                      <HelpCircle size={16} color="var(--primary)" />
+                      <span>{t('tourBtn')}</span>
+                    </div>
                   </button>
 
                   <div className="user-dropdown-divider" />

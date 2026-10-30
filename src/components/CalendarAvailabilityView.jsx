@@ -107,7 +107,9 @@ export default function CalendarAvailabilityView({
   onSaveAvailability,
   onAddSuggestion,
   onVoteSuggestion,
-  onConfirmSlot
+  onConfirmSlot,
+  controlledViewMode,
+  onViewModeChange
 }) {
   const { t, daysOfWeek, monthNames, lang } = useI18n();
   const isOrganizer = currentUser && event.organizer?.id === currentUser.id;
@@ -149,7 +151,12 @@ export default function CalendarAvailabilityView({
   }, [currentUser?.id, event.participants]);
 
   // Modo de visualização: 'month' | 'week' | 'day' | 'suggestions'
-  const [viewMode, setViewMode] = useState('week');
+  const [internalViewMode, setInternalViewMode] = useState('week');
+  const viewMode = controlledViewMode !== undefined ? controlledViewMode : internalViewMode;
+  const setViewMode = (mode) => {
+    setInternalViewMode(mode);
+    if (onViewModeChange) onViewModeChange(mode);
+  };
 
   // Data atual de navegação
   const initialDateStr = event.dates[0] || new Date().toISOString().split('T')[0];
@@ -632,7 +639,7 @@ export default function CalendarAvailabilityView({
   };
 
   return (
-    <div className="google-calendar-availability" onMouseUp={handleMouseUpSlot}>
+    <div className="google-calendar-availability" onMouseUp={handleMouseUpSlot} data-tour="calendar-availability-container">
       {/* Top Bar da Agenda: Navegação e Alternador de Visões */}
       <div style={{
         display: 'flex',
@@ -689,7 +696,7 @@ export default function CalendarAvailabilityView({
         </div>
 
         {/* Seletor de Visões: Mês | Semana | Dia | Sugestões */}
-        <div style={{ display: 'flex', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }} data-tour="calendar-view-mode-selector">
           {[
             { id: 'month', label: t('viewMonth') },
             { id: 'week', label: t('viewWeek') },
@@ -701,6 +708,7 @@ export default function CalendarAvailabilityView({
               <button
                 key={id}
                 onClick={() => setViewMode(id)}
+                data-tour={id === 'suggestions' ? 'date-suggestions-tab-btn' : undefined}
                 style={{
                   padding: '0.45rem 0.85rem',
                   fontSize: '0.825rem',
@@ -1073,7 +1081,7 @@ export default function CalendarAvailabilityView({
       {/* 4. VISÃO DE SUGESTÕES COLETIVAS DE HORÁRIO               */}
       {/* ======================================================== */}
       {viewMode === 'suggestions' && (
-        <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '1.5rem' }}>
+        <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '1.5rem' }} data-tour="date-suggestions-section">
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
             <div>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>

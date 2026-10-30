@@ -32,6 +32,8 @@ import ParticipantsModal from './components/ParticipantsModal';
 import Avatar from './components/Avatar';
 import ProfileAvatarModal from './components/ProfileAvatarModal';
 import EventStatusBadge from './components/EventStatusBadge';
+import OnboardingTour from './components/OnboardingTour';
+import AdSenseBanner from './components/AdSenseBanner';
 import {
   fetchEvents,
   subscribeToEventsRealtime,
@@ -74,6 +76,8 @@ export default function App() {
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const [isTourOpen, setIsTourOpen] = useState(false);
+  const [calendarViewMode, setCalendarViewMode] = useState('week');
   const [joinConfirmation, setJoinConfirmation] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
 
@@ -106,10 +110,17 @@ export default function App() {
 
     async function bootstrap() {
       setIsLoadingInitial(true);
+      const safetyTimer = setTimeout(() => {
+        setIsLoadingInitial(false);
+      }, 3000);
+
       try {
         const [sessionUser, initialEvents] = await Promise.all([
-          getCurrentSession(),
-          fetchEvents()
+          getCurrentSession().catch(() => null),
+          fetchEvents().catch(err => {
+            console.error('Erro ao carregar eventos:', err);
+            return [];
+          })
         ]);
         if (!active) return;
         setCurrentUser(sessionUser);
@@ -123,7 +134,8 @@ export default function App() {
           setLoadError(err.message || 'Erro ao conectar com o Supabase.');
         }
       } finally {
-        if (active) setIsLoadingInitial(false);
+        clearTimeout(safetyTimer);
+        setIsLoadingInitial(false);
       }
     }
 
@@ -211,6 +223,25 @@ export default function App() {
   };
 
   const currentEvent = events.find(e => e.id === currentEventId) || events[0] || null;
+
+  // Inicia o onboarding automaticamente no primeiro acesso ou via URL (?tour=true)
+  useEffect(() => {
+    if (isLoadingInitial || !currentEvent) return;
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tourParam = urlParams.get('tour');
+      const seen = localStorage.getItem('event_schedule_onboarding_completed');
+
+      if (tourParam === 'true' || tourParam === '1' || !seen) {
+        const timer = setTimeout(() => {
+          setIsTourOpen(true);
+        }, 700);
+        return () => clearTimeout(timer);
+      }
+    } catch (e) {
+      console.warn('Erro ao ler status do onboarding', e);
+    }
+  }, [isLoadingInitial, currentEvent?.id]);
 
   // Auto-adiciona o usuário ao acessar o link do evento
   useEffect(() => {
@@ -722,6 +753,7 @@ export default function App() {
           }
         }}
         eventsCount={events.length}
+        onStartTour={() => setIsTourOpen(true)}
       />
 
       <main className="app-main">
@@ -945,7 +977,7 @@ export default function App() {
         {/* Card Master em Estilo Calendly Split-View */}
         <div className="scheduler-card">
           {/* Painel Esquerdo: Identidade do Evento e Organizador */}
-          <aside className="event-sidebar">
+          <aside className="event-sidebar" data-tour="event-sidebar">
             <div className="organizer-info">
               <Avatar
                 src={currentEvent.organizer?.avatar}
@@ -1136,6 +1168,9 @@ export default function App() {
                 {isOrganizer ? t('manageParticipants') : t('viewParticipants')} ({currentEvent.participants?.length || 0})
               </button>
             </div>
+
+            {/* Publicidade Google AdSense */}
+            <AdSenseBanner style={{ marginTop: '1.25rem' }} />
           </aside>
 
           {/* Painel Direito: Abas de Votação, Sugestões do Algoritmo e Visão Geral */}
@@ -1175,10 +1210,11 @@ export default function App() {
               </div>
             )}
 
-            <div className="view-tabs">
+            <div className="view-tabs" data-tour="view-tabs">
               <button
                 className={`tab-btn ${activeTab === 'heatmap' ? 'active' : ''}`}
                 onClick={() => setActiveTab('heatmap')}
+                data-tour="tab-heatmap"
               >
                 <Users size={17} />
                 <span>{t('tabGroupOverview')}</span>
@@ -1190,6 +1226,7 @@ export default function App() {
               <button
                 className={`tab-btn ${activeTab === 'voting' ? 'active' : ''}`}
                 onClick={() => setActiveTab('voting')}
+                data-tour="tab-voting"
               >
                 <CalendarCheck2 size={17} />
                 <span>{t('tabMyAvailability')}</span>
@@ -1198,6 +1235,7 @@ export default function App() {
               <button
                 className={`tab-btn ${activeTab === 'suggestions' ? 'active' : ''}`}
                 onClick={() => setActiveTab('suggestions')}
+                data-tour="tab-suggestions"
               >
                 <Sparkles size={17} />
                 <span>{t('tabSmartSuggestions')}</span>
@@ -1206,6 +1244,7 @@ export default function App() {
               <button
                 className={`tab-btn ${activeTab === 'locations' ? 'active' : ''}`}
                 onClick={() => setActiveTab('locations')}
+                data-tour="tab-locations"
               >
                 <MapPin size={17} />
                 <span>{t('tabLocations')}</span>
@@ -1243,9 +1282,11 @@ export default function App() {
                   onAddSuggestion={handleAddSuggestion}
                   onVoteSuggestion={handleVoteSuggestion}
                   onConfirmSlot={handleConfirmSlot}
+                  controlledViewMode={calendarViewMode}
+                  onViewModeChange={setCalendarViewMode}
                 />
               ) : (
-                <div style={{ textAlign: 'center', padding: '4rem 1.5rem', background: '#f8fafc', borderRadius: 'var(--radius-md)' }}>
+                <div data-tour="calendar-availability-container" style={{ textAlign: 'center', padding: '4rem 1.5rem', background: '#f8fafc', borderRadius: 'var(--radius-md)' }}>
                   <Lock size={36} color="var(--primary)" style={{ margin: '0 auto 1rem auto' }} />
                   <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '0.5rem' }}>
                     {t('login')}
@@ -1350,6 +1391,16 @@ export default function App() {
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* Onboarding Tour Interativo */}
+      <OnboardingTour
+        isOpen={isTourOpen}
+        onClose={() => setIsTourOpen(false)}
+        activeTab={activeTab}
+        onSetTab={setActiveTab}
+        calendarViewMode={calendarViewMode}
+        onSetCalendarViewMode={setCalendarViewMode}
+      />
     </div>
   );
 }

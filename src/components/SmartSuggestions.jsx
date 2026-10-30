@@ -45,7 +45,7 @@ export default function SmartSuggestions({
 
   if (!suggestions.length) {
     return (
-      <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+      <div className="smart-suggestions-section" data-tour="smart-suggestions-section" style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
         <Calendar size={48} style={{ opacity: 0.4, margin: '0 auto 1rem auto' }} />
         <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>
           Ainda não há votos suficientes
@@ -58,7 +58,7 @@ export default function SmartSuggestions({
   }
 
   return (
-    <div className="smart-suggestions-section">
+    <div className="smart-suggestions-section" data-tour="smart-suggestions-section">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

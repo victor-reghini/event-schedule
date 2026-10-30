@@ -70,7 +70,7 @@ export default function LocationSuggestionsView({
   };
 
   return (
-    <div className="location-suggestions-section">
+    <div className="location-suggestions-section" data-tour="location-suggestions-section">
       {/* Top Header: Controle do Administrador e Local Atual */}
       <div style={{
         display: 'flex',
